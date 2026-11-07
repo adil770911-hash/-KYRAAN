@@ -1676,5 +1676,87 @@ Error generating stack: `+o.message+`
     }, 100);
   });
 </script>  <script type="application/json" data-clippy-inline-media-manifest="1">{"version":1,"slots":[]}</script>
-</body>
+</body> <!-- ПОДКЛЮЧЕНИЕ К SUPABASE -->
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+  const supabaseUrl = 'https://eevkhnenjrskpupvtkgi.supabase.co';
+  const supabaseKey = 'sb_publishable_6tNocMb7Mv9HqcjVaKxDDQ_PfK1DkXe';
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const PHONE_CODE = '+996';
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target?.closest?.('button');
+    if (!btn || !btn.textContent.includes('Подтвердить и найти')) return;
+
+    // 1. СИНХРОННО снимаем данные, пока React не перерисовал экран (capture: true)
+    const phoneInput = document.querySelector('input[inputmode="numeric"]');
+    let digits = (phoneInput?.value || '').replace(/\D/g, '');
+    
+    // Защита от вставки номера целиком (например, +996555...)
+    if (digits.startsWith('996')) digits = digits.slice(3);
+    digits = digits.slice(-9);
+
+    if (digits.length !== 9) return; // Если номер неполный — React сам покажет ошибку
+    const client_phone = PHONE_CODE + digits;
+
+    // 2. Читаем услугу
+    const titleEl = document.querySelector('.text-\\[18px\\].font-extrabold');
+    const serviceText = titleEl?.textContent.replace('Ищем:', '').trim() || '';
+
+    // 3. Определяем service_id, variant_id и hunter
+    let service_id = 'custom_order';
+    let variant_id = null;
+    let hunter = 'HUNTER_02';
+
+    if (serviceText.includes('Эвакуатор')) {
+      service_id = 'evacuator';
+      variant_id = serviceText.replace('Эвакуатор', '').trim() || null;
+      hunter = 'HUNTER_01';
+    } else if (serviceText.includes('Манипулятор')) {
+      service_id = 'manipulator';
+      variant_id = serviceText.replace('Манипулятор', '').trim() || null;
+      hunter = 'HUNTER_01';
+    } else if (['Портер', 'Sprinter', 'Гигант'].some(s => serviceText.includes(s))) {
+      service_id = 'cargo';
+      variant_id = serviceText;
+      hunter = 'HUNTER_01';
+    } else {
+      const directServices = {
+        'Сантехник': 'plumber', 'Клининг': 'cleaning', 'Сварщик': 'weld',
+        'Электрик': 'electric', 'Ремонт холодильников': 'fridge',
+        'Ремонт стиральных машин': 'washer', 'Телемастер': 'tv',
+        'Мастер на час': 'handyman'
+      };
+      service_id = directServices[serviceText] || 'custom_order';
+      hunter = 'HUNTER_02';
+    }
+
+    // 4. Отправляем в Supabase и ЖДЕМ подтверждения с ID
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([{
+          client_phone: client_phone,
+          service_id: service_id,
+          variant_id: variant_id,
+          hunter: hunter,
+          address: 'Уточнить у клиента'
+        }])
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('❌ Ошибка Supabase:', error);
+        alert('Ошибка базы: ' + error.message);
+      } else {
+        console.log('✅ Заказ создан! ID:', data.id, '| Номер:', client_phone);
+        localStorage.setItem('last_order_id', data.id);
+      }
+    } catch (err) {
+      console.error('❌ Критическая ошибка:', err);
+    }
+  }, true); // capture: true — критически важно для чтения DOM до перерисовки!
+          </script>
 </html>
