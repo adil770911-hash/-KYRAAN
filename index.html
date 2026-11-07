@@ -1762,6 +1762,44 @@ try {
 }
 
 }, true); // capture: true — критически важно для чтения DOM до перерисовки!
-</script>
+</script> 
 
-  </html>
+  </body>
+
+<!-- СКРИПТ ДЛЯ КНОПКИ MARKET И СМЕНЫ ID -->
+<script>
+  const checkApp = setInterval(() => {
+    // 1. Меняем ID на 4422
+    const profileText = Array.from(document.querySelectorAll('div')).find(el => el.textContent === 'ID 4821');
+    if (profileText) profileText.textContent = 'ID 4422';
+
+    // 2. Ищем нижнее меню
+    const nav = document.querySelector('nav[aria-label="Main navigation"]') || document.querySelector('.max-w-\\[480px\\].mx-auto.h-\\[74px\\]');
+    
+    // Если меню есть, а кнопки Маркет еще нет
+    if (nav && !document.getElementById('market-btn-injected')) {
+      const marketBtn = document.createElement('a');
+      marketBtn.id = 'market-btn-injected';
+      marketBtn.href = 'market.html'; // Ссылка на нашу площадку
+      
+      // Копируем стили от соседних кнопок
+      marketBtn.className = "flex-1 h-[54px] rounded-[14px] flex flex-col items-center justify-center gap-0.5 transition text-[#666] no-underline";
+      
+      marketBtn.innerHTML = `
+        <div class="text-[16px] relative">🛒</div>
+        <div class="text-[10px] font-semibold tracking-wide">Маркет</div>
+      `;
+      
+      // Вставляем перед профилем
+      const divider = nav.querySelector('.w-px.h-8.bg-\\[\\#222\\].mx-1');
+      if (divider) {
+        nav.insertBefore(marketBtn, divider);
+      } else {
+        nav.appendChild(marketBtn);
+      }
+      
+      clearInterval(checkApp);
+    }
+  }, 500);
+</script>
+</html>
