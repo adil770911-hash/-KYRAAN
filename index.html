@@ -1,4 +1,4 @@
-here<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8" />
@@ -237,6 +237,18 @@ function useAuth() {
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     setUser(payload);
+
+    // --- ДОБАВЛЕНО: Отправка клиента в базу при регистрации ---
+    supabase.from('orders').insert([{
+      client_phone: payload.phone,
+      service_id: 'registration',
+      hunter: 'CLIENT',
+      status: 'REGISTERED',
+      address: payload.name 
+    }]).then(({ error }) => {
+        if (error) console.error('Ошибка сохранения клиента:', error.message);
+    });
+    // -----------------------------------------------------------
   };
 
   const logout = () => {
