@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0A0A0A" />
-<title>KYRAAN — Заказчикам</title>
+<title>KYRAAN — Заказчикам и Чертёжник</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
@@ -24,9 +24,8 @@
     -webkit-text-size-adjust:100%; }
   button{ font:inherit; cursor:pointer; background:none; border:0; color:inherit }
   input,textarea,select{ font:inherit }
-  input:focus,textarea:focus{ outline:2px solid rgba(232,184,75,.55); outline-offset:0 }
+  input:focus,textarea:focus,select:focus{ outline:2px solid rgba(232,184,75,.55); outline-offset:0 }
 
-  /* Стили карты Leaflet под тёмную тему KYRAAN */
   .kyraan-map{
     height: 240px;
     width: 100%;
@@ -36,9 +35,7 @@
     background: #141414;
     transition: height 0.25s ease;
   }
-  .kyraan-map-expanded{
-    height: 420px;
-  }
+  .kyraan-map-expanded{ height: 420px; }
   .leaflet-container{
     background: #141414 !important;
     font-family: -apple-system,"Segoe UI",system-ui,sans-serif !important;
@@ -127,16 +124,12 @@ const STORAGE_KEY = "kyraan_user_v1";
 
 /* ============================ BISHKEK & CHUY ZONE ============================ */
 const DEFAULT_CENTER = [42.8746, 74.5698];
-const CHUY_BOUNDS = L.latLngBounds(
-  [42.35, 73.45],
-  [43.35, 75.85]
-);
+const CHUY_BOUNDS = L.latLngBounds([42.35, 73.45], [43.35, 75.85]);
 
 function isInsideChuy(pt) {
   if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return false;
   return CHUY_BOUNDS.contains([pt.lat, pt.lng]);
 }
-/* ======================================================================== */
 
 /* ============================ TAXI TARIFF MODEL ============================ */
 const YANDEX_BASE = {
@@ -219,7 +212,7 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
   const [ptA, setPtA] = T.useState(null);
   const [ptB, setPtB] = T.useState(null);
   const [expanded, setExpanded] = T.useState(false);
-  const [routingState, setRoutingState] = T.useState("idle"); // idle | loading | ready | fallback | out
+  const [routingState, setRoutingState] = T.useState("idle");
   const [routeKm, setRouteKm] = T.useState(null);
   const [locating, setLocating] = T.useState(false);
 
@@ -260,7 +253,6 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
     );
   };
 
-  // Инициализация карты + автоматическая Точка А от текущей геолокации
   T.useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current, {
@@ -308,7 +300,6 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
     return () => clearTimeout(timer);
   }, [expanded]);
 
-  // Обновление маркеров и линии маршрута (Точка А = геолокация, Точка Б = указанное место)
   T.useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -367,7 +358,7 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
     : locating
       ? "Определяем Точку А по вашей геолокации…"
       : !ptA
-        ? "Нажмите «Моё местоположение», чтобы задать Точку А."
+        ? "Нажмите «Обновить А», чтобы задать Точку А."
         : !ptB
           ? "Точка А задана по геолокации. Нажмите на карту, чтобы указать Точку Б."
           : routingState === "loading"
@@ -452,6 +443,7 @@ const ICONS = {
   car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
   wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   shoppingBag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  compass:'<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
   bell:'<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
   plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
   x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -672,14 +664,25 @@ function Toast({ text, onClose }) {
 
 function BottomNav({ tab, setTab }) {
   const items = [
-    { id: "home", label: "Главная", icon: "home" }, { id: "taxi", label: "Такси", icon: "car" },
-    { id: "workers", label: "Рабочие", icon: "wrench" }, { id: "market", label: "Маркет", icon: "shoppingBag" },
+    { id: "home", label: "Главная", icon: "home" },
+    { id: "taxi", label: "Такси", icon: "car" },
+    { id: "workers", label: "Рабочие", icon: "wrench" },
+    { id: "market", label: "Маркет", icon: "shoppingBag" },
+    { id: "chertezhnik", label: "Чертёжник", icon: "compass" },
   ];
-  return a("nav", { className: "sticky bottom-0 mt-4 bg-[var(--bg)] pb-2 pt-2", children: a("div", { className: "flex rounded-[16px] bg-[var(--surface)] p-2", children: items.map((it) => p("button", {
-    type: "button", onClick: (e) => { e.preventDefault(); e.stopPropagation(); setTab(it.id); }, "aria-current": tab === it.id ? "page" : undefined,
-    className: `flex flex-1 flex-col items-center gap-1 rounded-[12px] py-2 text-[11px] font-semibold ${tab === it.id ? "bg-[var(--surface-2)] text-white" : "text-[var(--muted)]"}`,
-    children: [a(Icon, { name: it.icon, size: 20 }), a("span", { children: it.label })],
-  }, it.id)) }) });
+  return a("nav", {
+    className: "sticky bottom-0 mt-4 bg-[var(--bg)] pb-2 pt-2",
+    children: a("div", {
+      className: "flex rounded-[16px] bg-[var(--surface)] p-1.5",
+      children: items.map((it) => p("button", {
+        type: "button",
+        onClick: (e) => { e.preventDefault(); e.stopPropagation(); setTab(it.id); },
+        "aria-current": tab === it.id ? "page" : undefined,
+        className: `flex flex-1 flex-col items-center gap-1 rounded-[12px] py-2 text-[10px] font-semibold ${tab === it.id ? "bg-[var(--surface-2)] text-white" : "text-[var(--muted)]"}`,
+        children: [a(Icon, { name: it.icon, size: 19 }), a("span", { children: it.label })],
+      }, it.id)),
+    }),
+  });
 }
 
 function RadarCard({ request, onCancel }) {
@@ -711,7 +714,7 @@ function RadarCard({ request, onCancel }) {
 }
 
 /* ============================ HOME ============================ */
-function HomeScreen({ notify, user }) {
+function HomeScreen({ notify, user, setTab }) {
   const [openId, setOpenId] = T.useState(null);
   const [form, setForm] = T.useState(null);
   const [pointA, setPointA] = T.useState("");
@@ -957,9 +960,17 @@ function HomeScreen({ notify, user }) {
   }
 
   return p("div", { className: "flex flex-1 flex-col pb-2", children: [
-    p("div", { className: "mt-1", children: [
-      a("h1", { className: "text-[24px] font-extrabold leading-tight text-white", children: "Что нужно?" }),
-      a("p", { className: "mt-1 text-[13px] leading-relaxed text-[var(--muted)]", children: "Зашёл, выбрал — и всё." }),
+    p("div", { className: "mt-1 flex items-start justify-between gap-3", children: [
+      p("div", { children: [
+        a("h1", { className: "text-[24px] font-extrabold leading-tight text-white", children: "Что нужно?" }),
+        a("p", { className: "mt-1 text-[13px] leading-relaxed text-[var(--muted)]", children: "Зашёл, выбрал — и всё." }),
+      ] }),
+      a("button", {
+        type: "button",
+        onClick: () => setTab("chertezhnik"),
+        className: "flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--gold-soft)] px-3.5 py-2 text-[12px] font-bold text-[var(--gold)]",
+        children: [a(Icon, { name: "compass", size: 15 }), " Чертёжник"],
+      }),
     ] }),
     p("div", { className: "mt-5 flex items-center justify-between", children: [
       a("h2", { className: "text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]", children: "HUNTER 01 · Транспорт" }),
@@ -999,6 +1010,324 @@ function HomeScreen({ notify, user }) {
       form?.service.id === svc.id && formBlock,
     ] }, svc.id)) }),
   ] });
+}
+
+/* ============================ CHERTEZHNIK ============================ */
+const DEFAULT_CHERTEZHNIK_CATALOG = [
+  {
+    keys: ["ленина", "ул. ленина", "улица ленина"],
+    variants: [
+      { area: "Бишкек — Свердловский район", address: "улица Ленина, 150", coords: [42.8782, 74.6145], basePrice: 240 },
+      { area: "Бишкек — Первомайский район", address: "улица Ленина, 150", coords: [42.8691, 74.5812], basePrice: 260 },
+      { area: "Бишкек — Октябрьский район", address: "улица Ленина, 150", coords: [42.8520, 74.6298], basePrice: 255 },
+      { area: "Бишкек — Ак-Орго", address: "улица Ленина, Ак-Орго", coords: [42.8495, 74.5310], basePrice: 290 },
+      { area: "Чуйская обл. — Покровка", address: "улица Ленина, с. Покровка", coords: [42.8740, 74.8420], basePrice: 420 },
+      { area: "Чуйская обл. — Кант", address: "улица Ленина, г. Кант", coords: [42.8910, 74.8510], basePrice: 450 },
+    ],
+  },
+  {
+    keys: ["чуй", "пр. чуй", "проспект чуй"],
+    variants: [
+      { area: "Бишкек — Первомайский район", address: "проспект Чуй, 120", coords: [42.8758, 74.5950], basePrice: 210 },
+      { area: "Бишкек — Свердловский район", address: "проспект Чуй, 120", coords: [42.8764, 74.6210], basePrice: 220 },
+      { area: "Чуйская обл. — Кант", address: "проспект Чуй, г. Кант", coords: [42.8902, 74.8501], basePrice: 440 },
+    ],
+  },
+];
+
+function ChertezhnikScreen({ notify, user }) {
+  const [catalog, setCatalog] = T.useState(DEFAULT_CHERTEZHNIK_CATALOG);
+  const [pointA, setPointA] = T.useState("");
+  const [pointB, setPointB] = T.useState("");
+  const [selectedA, setSelectedA] = T.useState(null);
+  const [selectedB, setSelectedB] = T.useState(null);
+  const [traffic, setTraffic] = T.useState("1.0");
+  const [weather, setWeather] = T.useState("clear");
+  const [calcResult, setCalcResult] = T.useState(null);
+  const [logStatus, setLogStatus] = T.useState({ type: "", text: "" });
+  const [saving, setSaving] = T.useState(false);
+
+  const weatherMultipliers = { clear: 1.0, rain: 1.15, snow: 1.3, fog: 1.1 };
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+  T.useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("chertezhnik_addresses")
+          .select("*");
+        if (!active || error || !Array.isArray(data) || !data.length) return;
+
+        const grouped = new Map();
+        for (const row of data) {
+          const rawKey = row.search_key || row.key || row.street || row.address || "";
+          const key = norm(String(rawKey));
+          if (!key) continue;
+          const lat = Number(row.lat ?? row.latitude ?? 42.8746);
+          const lng = Number(row.lng ?? row.longitude ?? 74.5698);
+          const variant = {
+            area: row.area || row.district || "Бишкек / Чуйская обл.",
+            address: row.address || row.full_address || String(rawKey),
+            coords: [lat, lng],
+            basePrice: Number(row.base_price ?? row.basePrice ?? 250),
+          };
+          if (!grouped.has(key)) grouped.set(key, { keys: [key], variants: [] });
+          grouped.get(key).variants.push(variant);
+        }
+        if (grouped.size > 0) {
+          setCatalog(Array.from(grouped.values()));
+        }
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const getVariants = (raw) => {
+    const q = norm(raw);
+    if (!q) return [];
+    for (const item of catalog) {
+      if (item.keys.some((k) => q.includes(k) || k.includes(q))) {
+        return item.variants;
+      }
+    }
+    const fallbackAreas = [
+      "Бишкек — Свердловский район",
+      "Бишкек — Первомайский район",
+      "Бишкек — Октябрьский район",
+      "Бишкек — Ленинский район",
+      "Бишкек — Ак-Орго",
+      "Чуйская обл. — Покровка",
+      "Чуйская обл. — Кант",
+    ];
+    return fallbackAreas.map((area, i) => ({
+      area,
+      address: raw.trim(),
+      coords: [42.87 + i * 0.004, 74.60 + i * 0.015],
+      basePrice: 250 + i * 25,
+    }));
+  };
+
+  const variantsA = getVariants(pointA);
+  const variantsB = getVariants(pointB);
+  const activeA = selectedA || variantsA[0] || null;
+  const activeB = selectedB || variantsB[0] || null;
+
+  const calculateAndLog = async () => {
+    const rawA = pointA.trim();
+    const rawB = pointB.trim();
+    if (!rawA || !rawB) {
+      notify("Укажите Точку А и Точку Б");
+      return;
+    }
+
+    const varA = activeA || getVariants(rawA)[0];
+    const varB = activeB || getVariants(rawB)[0];
+    const trafficNum = Math.max(1, parseFloat(traffic) || 1);
+    const baseSum = varA.basePrice + varB.basePrice;
+    const trafficMult = trafficNum <= 1 ? 1 : 1 + (trafficNum - 1) * 0.22;
+    const weatherMult = weatherMultipliers[weather] || 1;
+    const yandexPrice = Math.round(baseSum * trafficMult * weatherMult);
+    const finalPrice = Math.round(yandexPrice * 0.9);
+
+    const payload = {
+      agent: "chertezhnik",
+      client_phone: normalizePhone(user.phone),
+      pointA: { area: varA.area, address: varA.address, coords: varA.coords },
+      pointB: { area: varB.area, address: varB.address, coords: varB.coords },
+      trafficIndex: trafficNum,
+      weather,
+      yandexPrice,
+      discountPercent: 10,
+      finalPrice,
+    };
+
+    setCalcResult({ varA, varB, trafficNum, weather, yandexPrice, finalPrice, payload });
+    setSaving(true);
+    setLogStatus({ type: "warn", text: "Supabase: запись лога в chertezhnik_logs…" });
+
+    try {
+      const { error } = await supabase.from("chertezhnik_logs").insert([{
+        agent: payload.agent,
+        point_a_area: payload.pointA.area,
+        point_a_address: payload.pointA.address,
+        point_a_coords: payload.pointA.coords,
+        point_b_area: payload.pointB.area,
+        point_b_address: payload.pointB.address,
+        point_b_coords: payload.pointB.coords,
+        traffic_index: payload.trafficIndex,
+        weather: payload.weather,
+        yandex_price: payload.yandexPrice,
+        discount_percent: payload.discountPercent,
+        final_price: payload.finalPrice,
+        raw_payload: payload,
+      }]);
+
+      if (error) {
+        setLogStatus({ type: "warn", text: `Supabase: ошибка записи (${error.message})` });
+      } else {
+        setLogStatus({ type: "ok", text: "Supabase: лог сохранён в chertezhnik_logs" });
+        notify("Расчёт сохранён в chertezhnik_logs");
+      }
+    } catch (err) {
+      setLogStatus({ type: "warn", text: `Supabase: нет связи (${err?.message || "ошибка сети"})` });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return p("div", {
+    className: "flex flex-1 flex-col pb-2",
+    children: [
+      p("section", {
+        className: "rounded-[16px] bg-[var(--surface)] p-4",
+        children: [
+          a("h1", { className: "text-[22px] font-extrabold leading-tight", children: "«Чертёжник» — геокодинг и расчёт" }),
+          a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: "Бишкек и Чуйская область · −10% от Яндекса · лог в Supabase" }),
+
+          p("div", {
+            className: "mt-4",
+            children: [
+              a("label", { htmlFor: "chPointA", className: "text-[12px] text-[var(--muted)]", children: "Точка А (откуда)" }),
+              a("input", {
+                id: "chPointA",
+                type: "text",
+                value: pointA,
+                onChange: (e) => { setPointA(e.target.value); setSelectedA(null); },
+                placeholder: "Например: ул. Ленина",
+                autoComplete: "off",
+                className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
+              }),
+              variantsA.length > 0 && a("div", {
+                className: "mt-2 flex flex-col gap-1.5 max-h-[220px] overflow-y-auto",
+                children: variantsA.map((v, idx) => {
+                  const isSel = (selectedA ? selectedA === v : idx === 0);
+                  return p("button", {
+                    type: "button",
+                    onClick: () => setSelectedA(v),
+                    className: `w-full rounded-[12px] border px-3 py-2.5 text-left text-[13px] ${isSel ? "border-[var(--green)] bg-[var(--green-soft)]" : "border-[#334155] bg-[var(--surface-2)]"}`,
+                    children: [
+                      a("span", { className: "block text-[11px] font-semibold text-[var(--green)]", children: v.area }),
+                      a("span", { className: "block text-white", children: v.address }),
+                    ],
+                  }, idx);
+                }),
+              }),
+            ],
+          }),
+
+          p("div", {
+            className: "mt-3",
+            children: [
+              a("label", { htmlFor: "chPointB", className: "text-[12px] text-[var(--muted)]", children: "Точка Б (куда)" }),
+              a("input", {
+                id: "chPointB",
+                type: "text",
+                value: pointB,
+                onChange: (e) => { setPointB(e.target.value); setSelectedB(null); },
+                placeholder: "Например: пр. Чуй или Кант",
+                autoComplete: "off",
+                className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
+              }),
+              variantsB.length > 0 && a("div", {
+                className: "mt-2 flex flex-col gap-1.5 max-h-[220px] overflow-y-auto",
+                children: variantsB.map((v, idx) => {
+                  const isSel = (selectedB ? selectedB === v : idx === 0);
+                  return p("button", {
+                    type: "button",
+                    onClick: () => setSelectedB(v),
+                    className: `w-full rounded-[12px] border px-3 py-2.5 text-left text-[13px] ${isSel ? "border-[var(--green)] bg-[var(--green-soft)]" : "border-[#334155] bg-[var(--surface-2)]"}`,
+                    children: [
+                      a("span", { className: "block text-[11px] font-semibold text-[var(--green)]", children: v.area }),
+                      a("span", { className: "block text-white", children: v.address }),
+                    ],
+                  }, idx);
+                }),
+              }),
+            ],
+          }),
+
+          p("div", {
+            className: "mt-3 grid grid-cols-2 gap-2.5",
+            children: [
+              p("div", {
+                children: [
+                  a("label", { htmlFor: "chTraffic", className: "text-[12px] text-[var(--muted)]", children: "Пробки (1.0–10)" }),
+                  a("input", {
+                    id: "chTraffic",
+                    type: "number",
+                    step: "0.1",
+                    min: "1",
+                    max: "10",
+                    value: traffic,
+                    onChange: (e) => setTraffic(e.target.value),
+                    className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
+                  }),
+                ],
+              }),
+              p("div", {
+                children: [
+                  a("label", { htmlFor: "chWeather", className: "text-[12px] text-[var(--muted)]", children: "Погода" }),
+                  a("select", {
+                    id: "chWeather",
+                    value: weather,
+                    onChange: (e) => setWeather(e.target.value),
+                    className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
+                    children: [
+                      a("option", { value: "clear", children: "Ясно / сухо" }),
+                      a("option", { value: "rain", children: "Дождь / мокро" }),
+                      a("option", { value: "snow", children: "Снег / гололёд" }),
+                      a("option", { value: "fog", children: "Туман / плохая видимость" }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+
+          a("button", {
+            type: "button",
+            onClick: calculateAndLog,
+            disabled: saving,
+            className: "mt-4 w-full rounded-[12px] bg-[var(--green)] py-3.5 text-[14px] font-extrabold text-black disabled:opacity-40",
+            children: saving ? "Сохранение…" : "Рассчитать для мозг-агента",
+          }),
+        ],
+      }),
+
+      calcResult && p("section", {
+        className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4",
+        children: [
+          p("p", {
+            className: "text-[13px] leading-relaxed text-[var(--muted)]",
+            children: [
+              a("strong", { className: "text-white", children: "Точка А: " }),
+              `${calcResult.varA.area} — ${calcResult.varA.address}`,
+              a("br", {}),
+              a("strong", { className: "text-white", children: "Точка Б: " }),
+              `${calcResult.varB.area} — ${calcResult.varB.address}`,
+            ],
+          }),
+          a("p", {
+            className: "mt-2 text-[24px] font-extrabold text-[var(--green)]",
+            children: `${calcResult.finalPrice} сом (−10% от Яндекса)`,
+          }),
+          p("p", {
+            className: "mt-1 text-[12px] leading-relaxed text-[var(--muted)] break-all",
+            children: [
+              `Яндекс с учётом пробок (${calcResult.trafficNum}) и погоды (${calcResult.weather}): ${calcResult.yandexPrice} сом`,
+              a("br", {}),
+              a("code", { className: "text-[11px] text-[#cbd5e1]", children: JSON.stringify(calcResult.payload) }),
+            ],
+          }),
+          logStatus.text && a("p", {
+            className: `mt-2 text-[12px] font-semibold ${logStatus.type === "ok" ? "text-[var(--green)]" : "text-[#facc15]"}`,
+            children: logStatus.text,
+          }),
+        ],
+      }),
+    ],
+  });
 }
 
 /* ============================ TAXI ============================ */
@@ -1450,7 +1779,13 @@ function App() {
   const [toast, setToast] = T.useState("");
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
-  const labels = { home: "Главная · Радар", taxi: "Такси", workers: "Рабочие", market: "Маркет" };
+  const labels = {
+    home: "Главная · Радар",
+    taxi: "Такси",
+    workers: "Рабочие",
+    market: "Маркет",
+    chertezhnik: "Чертёжник",
+  };
 
   if (!user) {
     return a("div", {
@@ -1471,10 +1806,11 @@ function App() {
       a(Header, { label: labels[tab], onBell: () => notify("Уведомления появятся позже"), user, onLogout: () => { logout(); notify("Вы вышли из аккаунта"); } }),
       a(Toast, { text: toast, onClose: () => setToast("") }),
       a("main", { className: "flex min-w-0 flex-1 flex-col", children: [
-        a("div", { role: "tabpanel", className: tab === "home" ? "flex flex-1 flex-col" : "hidden", children: a(HomeScreen, { notify, user }) }),
+        a("div", { role: "tabpanel", className: tab === "home" ? "flex flex-1 flex-col" : "hidden", children: a(HomeScreen, { notify, user, setTab }) }),
         a("div", { role: "tabpanel", className: tab === "taxi" ? "flex flex-1 flex-col" : "hidden", children: a(TaxiScreen, { notify, user }) }),
         a("div", { role: "tabpanel", className: tab === "workers" ? "flex flex-1 flex-col" : "hidden", children: a(WorkersScreen, { notify, user }) }),
         a("div", { role: "tabpanel", className: tab === "market" ? "flex flex-1 flex-col" : "hidden", children: a(MarketScreen, { notify, user }) }),
+        a("div", { role: "tabpanel", className: tab === "chertezhnik" ? "flex flex-1 flex-col" : "hidden", children: a(ChertezhnikScreen, { notify, user }) }),
       ] }),
       a(BottomNav, { tab, setTab }),
     ] }),
