@@ -7,6 +7,8 @@
 <title>KYRAAN — Заказчикам</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <style>
   :root{
     --bg:#0A0A0A; --surface:#1E1E1E; --surface-2:#2A2A2A;
@@ -23,6 +25,34 @@
   button{ font:inherit; cursor:pointer; background:none; border:0; color:inherit }
   input,textarea,select{ font:inherit }
   input:focus,textarea:focus{ outline:2px solid rgba(232,184,75,.55); outline-offset:0 }
+
+  /* Стили карты Leaflet под тёмную тему KYRAAN */
+  .kyraan-map{
+    height: 240px;
+    width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.12);
+    background: #141414;
+  }
+  .leaflet-container{
+    background: #141414 !important;
+    font-family: -apple-system,"Segoe UI",system-ui,sans-serif !important;
+  }
+  .leaflet-tile-pane{
+    filter: invert(92%) hue-rotate(180deg) brightness(92%) contrast(92%);
+  }
+  .leaflet-control-attribution{
+    background: rgba(10,10,10,.78) !important;
+    color: #9B9B9B !important;
+    font-size: 10px !important;
+  }
+  .leaflet-control-attribution a{ color: #E8B84B !important; }
+  .leaflet-control-zoom a{
+    background: #2A2A2A !important;
+    color: #F5F3EF !important;
+    border-color: rgba(255,255,255,.12) !important;
+  }
 
   @keyframes radar-sweep{ from{transform:rotate(0)} to{transform:rotate(360deg)} }
   @keyframes radar-pulse{ 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.65);opacity:.45} }
@@ -91,6 +121,9 @@ const PHONE_HINT = "Обязательно +996 и 9 цифр";
 const PHONE_PLACEHOLDER = "+996 704 644 876";
 const STORAGE_KEY = "kyraan_user_v1";
 
+// Центр по умолчанию: Бишкек
+const DEFAULT_CENTER = [42.8746, 74.5698];
+
 /* ============================ TAXI TARIFF MODEL ============================ */
 // Единый тариф Эконом: цена = −20% от Яндекса, водитель забирает 100%, KYRAAN — 0
 const YANDEX_BASE = {
@@ -98,10 +131,9 @@ const YANDEX_BASE = {
 };
 const KYRAAN_DISCOUNT = 0.20;
 
-function calcTaxi(classId, km, at = new Date()) {
+function calcTaxi(classId, roadKmInput, at = new Date()) {
   const t = YANDEX_BASE["Эконом"];
-  const safeKm = Math.max(0.5, Number(km) || 0.5);
-  const roadKm = Math.max(0.5, safeKm * 1.35);
+  const roadKm = Math.max(0.5, Number(roadKmInput) || 0.5);
   const hour = at.getHours();
   const night = hour >= 23 || hour < 6;
 
@@ -120,8 +152,242 @@ function calcTaxi(classId, km, at = new Date()) {
     night,
   };
 }
-/* ======================================================================== */
 
+/* ============================ OSM + OSRM HELPERS ============================ */
+function haversineKm(aPt, bPt) {
+  const R = 6371;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(bPt.lat - aPt.lat);
+  const dLng = toRad(bPt.lng - aPt.lng);
+  const s1 = Math.sin(dLat / 2);
+  const s2 = Math.sin(dLng / 2);
+  const q = s1 * s1 + Math.cos(toRad(aPt.lat)) * Math.cos(toRad(bPt.lat)) * s2 * s2;
+  return 2 * R * Math.atan2(Math.sqrt(q), Math.sqrt(1 - q));
+}
+
+async function reverseGeocodeLabel(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&accept-language=ru`;
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    if (!res.ok) throw new Error("geocode");
+    const data = await res.json();
+    const addr = data.address || {};
+    const street = addr.road || addr.pedestrian || addr.footway || addr.neighbourhood || addr.suburb || "";
+    const house = addr.house_number || "";
+    const city = addr.city || addr.town || addr.village || "";
+    const short = [street, house].filter(Boolean).join(", ");
+    if (short) return short;
+    if (city) return city;
+    if (data.display_name) return data.display_name.split(",").slice(0, 2).join(",").trim();
+  } catch {}
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+async function fetchOsrmRoute(aPt, bPt) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${aPt.lng},${aPt.lat};${bPt.lng},${bPt.lat}?overview=full&geometries=geojson`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("osrm");
+  const data = await res.json();
+  const route = data.routes && data.routes[0];
+  if (!route) throw new Error("no route");
+  const km = Math.max(0.5, Math.round((route.distance / 1000) * 10) / 10);
+  const coords = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+  return { km, coords, isFallback: false };
+}
+
+/* ============================ MAP ROUTE PICKER ============================ */
+function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
+  const mapContainerRef = T.useRef(null);
+  const mapRef = T.useRef(null);
+  const markerARef = T.useRef(null);
+  const markerBRef = T.useRef(null);
+  const lineRef = T.useRef(null);
+
+  const [ptA, setPtA] = T.useState(null);
+  const [ptB, setPtB] = T.useState(null);
+  const [routingState, setRoutingState] = T.useState("idle"); // idle | loading | ready | fallback
+  const [routeKm, setRouteKm] = T.useState(null);
+  const [locating, setLocating] = T.useState(false);
+
+  const ptARef = T.useRef(ptA);
+  const ptBRef = T.useRef(ptB);
+  ptARef.current = ptA;
+  ptBRef.current = ptB;
+
+  const makePinIcon = (bg, label) =>
+    L.divIcon({
+      className: "",
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      html: `<div style="width:28px;height:28px;border-radius:9999px;background:${bg};color:#0A0A0A;font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #0A0A0A;box-shadow:0 2px 8px rgba(0,0,0,.6)">${label}</div>`,
+    });
+
+  // Инициализация карты Leaflet
+  T.useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+    const map = L.map(mapContainerRef.current, {
+      center: DEFAULT_CENTER,
+      zoom: 13,
+      zoomControl: true,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    map.on("click", async (e) => {
+      const clicked = { lat: e.latlng.lat, lng: e.latlng.lng };
+      const currentA = ptARef.current;
+      const currentB = ptBRef.current;
+
+      if (!currentA || (currentA && currentB)) {
+        // Ставим Точку А и сбрасываем Б
+        setPtA(clicked);
+        setPtB(null);
+        setRouteKm(null);
+        setRoutingState("idle");
+        onRouteCalculated(null);
+        const labelA = await reverseGeocodeLabel(clicked.lat, clicked.lng);
+        onChangePoints(labelA, "");
+      } else {
+        // Ставим Точку Б
+        setPtB(clicked);
+        const labelB = await reverseGeocodeLabel(clicked.lat, clicked.lng);
+        onChangePoints(pointA, labelB);
+      }
+    });
+
+    mapRef.current = map;
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Обновление маркеров и линии маршрута
+  T.useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (markerARef.current) { markerARef.current.remove(); markerARef.current = null; }
+    if (markerBRef.current) { markerBRef.current.remove(); markerBRef.current = null; }
+    if (lineRef.current) { lineRef.current.remove(); lineRef.current = null; }
+
+    if (ptA) {
+      markerARef.current = L.marker([ptA.lat, ptA.lng], { icon: makePinIcon("#2BD46B", "А") }).addTo(map);
+    }
+    if (ptB) {
+      markerBRef.current = L.marker([ptB.lat, ptB.lng], { icon: makePinIcon("#E8B84B", "Б") }).addTo(map);
+    }
+
+    if (ptA && ptB) {
+      let cancelled = false;
+      setRoutingState("loading");
+      fetchOsrmRoute(ptA, ptB)
+        .then(({ km, coords }) => {
+          if (cancelled) return;
+          lineRef.current = L.polyline(coords, { color: "#E8B84B", weight: 4, opacity: 0.9 }).addTo(map);
+          map.fitBounds(lineRef.current.getBounds(), { padding: [28, 28] });
+          setRouteKm(km);
+          setRoutingState("ready");
+          onRouteCalculated(km);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          const fallbackKm = Math.max(0.5, Math.round(haversineKm(ptA, ptB) * 1.35 * 10) / 10);
+          lineRef.current = L.polyline([[ptA.lat, ptA.lng], [ptB.lat, ptB.lng]], {
+            color: "#E8B84B", weight: 3, dashArray: "6 6", opacity: 0.85,
+          }).addTo(map);
+          map.fitBounds(lineRef.current.getBounds(), { padding: [28, 28] });
+          setRouteKm(fallbackKm);
+          setRoutingState("fallback");
+          onRouteCalculated(fallbackKm);
+        });
+      return () => { cancelled = true; };
+    } else if (ptA) {
+      map.setView([ptA.lat, ptA.lng], Math.max(map.getZoom(), 14));
+    }
+  }, [ptA, ptB]);
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setPtA(coords);
+        setPtB(null);
+        setRouteKm(null);
+        setRoutingState("idle");
+        onRouteCalculated(null);
+        if (mapRef.current) mapRef.current.setView([coords.lat, coords.lng], 15);
+        const labelA = await reverseGeocodeLabel(coords.lat, coords.lng);
+        onChangePoints(labelA, "");
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  const clearPoints = () => {
+    setPtA(null);
+    setPtB(null);
+    setRouteKm(null);
+    setRoutingState("idle");
+    onRouteCalculated(null);
+    onChangePoints("", "");
+    if (mapRef.current) mapRef.current.setView(DEFAULT_CENTER, 13);
+  };
+
+  const hintText = !ptA
+    ? "Нажмите на карту, чтобы указать Точку А (откуда), или нажмите «Моё местоположение»."
+    : !ptB
+      ? "Теперь нажмите на карту, чтобы указать Точку Б (куда). Километраж посчитается сам."
+      : routingState === "loading"
+        ? "Строим маршрут по дорогам OpenStreetMap / OSRM…"
+        : routingState === "fallback"
+          ? `Маршрут построен по прямой с коэффициентом дорог: ${routeKm} км.`
+          : `Маршрут построен по дорогам: ${routeKm} км. Чтобы выбрать заново — нажмите «Очистить».`;
+
+  return p("div", {
+    className: "mt-3 rounded-[14px] bg-[var(--surface-2)] p-3",
+    children: [
+      p("div", {
+        className: "mb-2 flex items-center justify-between gap-2",
+        children: [
+          a("span", { className: "text-[12px] font-bold text-white", children: "Карта маршрута (OpenStreetMap)" }),
+          p("div", {
+            className: "flex items-center gap-1.5",
+            children: [
+              a("button", {
+                type: "button",
+                onClick: useMyLocation,
+                disabled: locating,
+                className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--gold)] disabled:opacity-40",
+                children: locating ? "GPS…" : "Моё местоположение",
+              }),
+              (ptA || ptB) && a("button", {
+                type: "button",
+                onClick: clearPoints,
+                className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]",
+                children: "Очистить",
+              }),
+            ],
+          }),
+        ],
+      }),
+      a("div", { ref: mapContainerRef, className: "kyraan-map", "aria-label": "Интерактивная карта выбора точек А и Б" }),
+      a("p", {
+        className: "mt-2 text-[11px] leading-snug text-[var(--muted)]",
+        children: hintText,
+      }),
+    ],
+  });
+}
+
+/* ============================ PHONE & FORMATTING ============================ */
 const digits = (v) => String(v || "").replace(/\D/g, "");
 function normalizePhone(v) {
   if (!v) return "";
@@ -417,7 +683,7 @@ function HomeScreen({ notify, user }) {
   const [form, setForm] = T.useState(null);
   const [pointA, setPointA] = T.useState("");
   const [pointB, setPointB] = T.useState("");
-  const [kmInput, setKmInput] = T.useState("5");
+  const [routeKm, setRouteKm] = T.useState(null);
   const [error, setError] = T.useState("");
   const [request, setRequest] = T.useState(null);
   const [scrollTo, setScrollTo] = T.useState(null);
@@ -427,14 +693,14 @@ function HomeScreen({ notify, user }) {
   const nodeRefs = T.useRef({});
 
   const isCityTaxi = form?.service?.id === "city_taxi";
-  const quote = isCityTaxi ? calcTaxi("Эконом", kmInput) : null;
+  const quote = isCityTaxi && routeKm ? calcTaxi("Эконом", routeKm) : null;
 
   const openForm = (service, sub) => {
     setOpenId(service.id);
     setForm({ service, sub });
     setPointA("");
     setPointB("");
-    setKmInput("5");
+    setRouteKm(null);
     setError("");
   };
   const closeForm = () => { setForm(null); setError(""); };
@@ -448,6 +714,10 @@ function HomeScreen({ notify, user }) {
     if (!form) return;
     if (!isValidPhone(user.phone)) {
       setError("Ваш номер некорректен — выйдите и зарегистрируйтесь заново.");
+      return;
+    }
+    if (isCityTaxi && !routeKm) {
+      setError("Укажите Точку А и Точку Б на карте, чтобы рассчитать маршрут.");
       return;
     }
 
@@ -474,6 +744,7 @@ function HomeScreen({ notify, user }) {
         night: quote.night,
         direct_settlement: true,
         kyraan_fee: 0,
+        map_provider: "openstreetmap+osrm",
       };
     }
 
@@ -518,9 +789,9 @@ function HomeScreen({ notify, user }) {
   const activeService = request ? [...TRANSPORT, ...MASTERS].find((s) => s.id === request.serviceId) || null : null;
   const hunterLabel = activeService && TRANSPORT.some((s) => s.id === activeService.id) ? "HUNTER 01 · Транспорт" : "HUNTER 02 · Мастера";
 
-  const taxiQuoteBlock = isCityTaxi && quote && p("div", {
+  const taxiQuoteBlock = isCityTaxi && p("div", {
     className: "mt-4 rounded-[14px] bg-[var(--surface-2)] p-4",
-    children: [
+    children: quote ? [
       p("div", { className: "flex items-center justify-between", children: [
         a("span", { className: "text-[13px] text-[var(--muted)]", children: "Яндекс.Такси (Эконом)" }),
         a("span", { className: "text-[15px] font-bold text-[var(--muted)] line-through", children: quote.yandex + " сом" }),
@@ -547,7 +818,7 @@ function HomeScreen({ notify, user }) {
             a("p", { className: "mt-0.5 font-bold", children: quote.boarding + " сом" }),
           ] }),
           p("div", { className: "rounded-[10px] bg-[var(--surface)] p-2.5 text-center", children: [
-            a("p", { className: "text-[var(--muted)]", children: ["Километраж (", quote.km, " км)"] }),
+            a("p", { className: "text-[var(--muted)]", children: ["По карте (", quote.km, " км)"] }),
             a("p", { className: "mt-0.5 font-bold", children: Math.max(0, quote.total - quote.boarding) + " сом" }),
           ] }),
         ],
@@ -558,7 +829,12 @@ function HomeScreen({ notify, user }) {
       }),
       a("p", {
         className: "mt-2 text-center text-[11px] leading-snug text-[var(--muted)]",
-        children: "Водитель получает 100%, KYRAAN — 0. Оплата напрямую водителю.",
+        children: "Километраж рассчитан автоматически по маршруту. Водитель получает 100%, KYRAAN — 0. Оплата напрямую водителю.",
+      }),
+    ] : [
+      a("p", {
+        className: "text-center text-[12px] leading-relaxed text-[var(--muted)]",
+        children: "Поставьте Точку А и Точку Б на карте выше — система сама посчитает километраж и покажет цену со скидкой −20% от Яндекса.",
       }),
     ],
   });
@@ -574,7 +850,7 @@ function HomeScreen({ notify, user }) {
       a("p", {
         className: "mt-1 text-[13px] leading-relaxed text-[var(--muted)]",
         children: isCityTaxi
-          ? "Тариф Эконом · −20% от Яндекса. Оплата напрямую водителю, комиссия KYRAAN — 0 сом."
+          ? "Тариф Эконом · −20% от Яндекса. Километраж считается по карте автоматически. Комиссия KYRAAN — 0 сом."
           : "Заявка будет создана от вашего номера.",
       }),
       p("div", {
@@ -583,6 +859,15 @@ function HomeScreen({ notify, user }) {
           a(Icon, { name: "phone", size: 14, className: "text-[var(--gold)]" }),
           a("span", { className: "text-[13px] font-semibold", children: user.phone }),
         ],
+      }),
+      isCityTaxi && a(MapRoutePicker, {
+        pointA,
+        pointB,
+        onChangePoints: (aLabel, bLabel) => {
+          setPointA(aLabel);
+          setPointB(bLabel);
+        },
+        onRouteCalculated: (km) => setRouteKm(km),
       }),
       p("div", {
         className: "mt-3 flex flex-col gap-3",
@@ -594,16 +879,6 @@ function HomeScreen({ notify, user }) {
           p("div", { children: [
             a("label", { className: "text-[12px] text-[var(--muted)]", children: isCityTaxi ? "Точка Б (куда)" : "Точка Б (по желанию)" }),
             a("input", { value: pointB, onChange: (e) => setPointB(e.target.value.slice(0, 80)), placeholder: "Куда", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-          ] }),
-          isCityTaxi && p("div", { children: [
-            a("label", { className: "text-[12px] text-[var(--muted)]", children: "Расстояние по прямой, км" }),
-            a("input", {
-              type: "number", inputMode: "decimal", min: "0.5", step: "0.5",
-              value: kmInput,
-              onChange: (e) => setKmInput(e.target.value),
-              placeholder: "5",
-              className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
-            }),
           ] }),
         ],
       }),
@@ -655,7 +930,7 @@ function HomeScreen({ notify, user }) {
       a("h2", { className: "text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]", children: "HUNTER 01 · Транспорт" }),
       a("span", { className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]", children: [TRANSPORT.length, " услуги"] }),
     ] }),
-    a("p", { className: "mt-2 rounded-[12px] bg-[var(--gold-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--gold)]", children: "Такси — Эконом (−20% от Яндекса, прямой расчёт с водителем)" }),
+    a("p", { className: "mt-2 rounded-[12px] bg-[var(--gold-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--gold)]", children: "Такси — Эконом (−20% от Яндекса, расчёт километража по карте, оплата напрямую водителю)" }),
     a("div", { className: "mt-3 flex flex-col gap-3", children: TRANSPORT.map((svc) => {
       const isOpen = openId === svc.id;
       return p("section", { ref: (el) => { nodeRefs.current[svc.id] = el; }, className: "rounded-[16px] bg-[#1E1E1E] p-4", children: [
