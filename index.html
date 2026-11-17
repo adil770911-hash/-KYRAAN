@@ -91,41 +91,143 @@ const PHONE_HINT = "Обязательно +996 и 9 цифр";
 const PHONE_PLACEHOLDER = "+996 704 644 876";
 const STORAGE_KEY = "kyraan_user_v1";
 
-/* ============================ TAXI TARIFF MODEL ============================ */
-const YANDEX_BASE = {
-  "Эконом": { boarding: 50, perKm: 30, minimum: 150 },
-};
-const KYRAAN_DISCOUNT = 0.20;
+/* ============================ CHERTEZHNIK CATALOG & ENGINE ============================ */
+const DEFAULT_CHERTEZHNIK_CATALOG = [
+  {
+    keys: ["ленина", "ул. ленина", "улица ленина"],
+    variants: [
+      { area: "Бишкек — Свердловский район", address: "улица Ленина, 150", coords: [42.8782, 74.6145], basePrice: 240 },
+      { area: "Бишкек — Первомайский район", address: "улица Ленина, 150", coords: [42.8691, 74.5812], basePrice: 260 },
+      { area: "Бишкек — Октябрьский район", address: "улица Ленина, 150", coords: [42.8520, 74.6298], basePrice: 255 },
+      { area: "Бишкек — Ак-Орго", address: "улица Ленина, Ак-Орго", coords: [42.8495, 74.5310], basePrice: 290 },
+      { area: "Чуйская обл. — Покровка", address: "улица Ленина, с. Покровка", coords: [42.8740, 74.8420], basePrice: 420 },
+      { area: "Чуйская обл. — Кант", address: "улица Ленина, г. Кант", coords: [42.8910, 74.8510], basePrice: 450 },
+    ],
+  },
+  {
+    keys: ["чуй", "пр. чуй", "проспект чуй"],
+    variants: [
+      { area: "Бишкек — Первомайский район", address: "проспект Чуй, 120", coords: [42.8758, 74.5950], basePrice: 210 },
+      { area: "Бишкек — Свердловский район", address: "проспект Чуй, 120", coords: [42.8764, 74.6210], basePrice: 220 },
+      { area: "Чуйская обл. — Кант", address: "проспект Чуй, г. Кант", coords: [42.8902, 74.8501], basePrice: 440 },
+    ],
+  },
+];
 
-function estimateRouteKm(pointA, pointB) {
-  const combined = `${pointA || ""} ${pointB || ""}`.toLowerCase();
-  const longZones = ["кант", "токмок", "беловодск", "кара-балты", "сокулук", "ивановка", "милянфан", "аэропорт", "манас"];
-  if (longZones.some((z) => combined.includes(z))) {
-    return 24;
+const WEATHER_MULTIPLIERS = { clear: 1.0, rain: 1.15, snow: 1.3, fog: 1.1 };
+const normStr = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+function getChertezhnikVariants(raw, catalog = DEFAULT_CHERTEZHNIK_CATALOG) {
+  const q = normStr(raw);
+  if (!q) return [];
+  for (const item of catalog) {
+    if (item.keys.some((k) => q.includes(k) || k.includes(q))) {
+      return item.variants;
+    }
   }
-  return 8;
+  const fallbackAreas = [
+    "Бишкек — Свердловский район",
+    "Бишкек — Первомайский район",
+    "Бишкек — Октябрьский район",
+    "Бишкек — Ленинский район",
+    "Бишкек — Ак-Орго",
+    "Чуйская обл. — Покровка",
+    "Чуйская обл. — Кант",
+  ];
+  return fallbackAreas.map((area, i) => ({
+    area,
+    address: raw.trim(),
+    coords: [42.87 + i * 0.004, 74.60 + i * 0.015],
+    basePrice: 250 + i * 25,
+  }));
 }
 
-function calcTaxi(classId, roadKmInput, at = new Date()) {
-  const t = YANDEX_BASE["Эконом"];
-  const roadKm = Math.max(0.5, Number(roadKmInput) || 0.5);
-  const hour = at.getHours();
-  const night = hour >= 23 || hour < 6;
+function calcChertezhnikRoute({ rawA, rawB, selectedA, selectedB, catalog, traffic = "1.0", weather = "clear", clientPhone = "" }) {
+  const cleanA = String(rawA || "").trim();
+  const cleanB = String(rawB || "").trim();
+  if (!cleanB) return null;
 
-  const yandexRaw = Math.max(t.minimum, t.boarding + roadKm * t.perKm);
-  const yandex = Math.round(yandexRaw * (night ? 1.3 : 1) / 10) * 10;
+  const varA = selectedA || (cleanA ? getChertezhnikVariants(cleanA, catalog)[0] : {
+    area: "Бишкек — Точка подачи",
+    address: "Подача по согласованию",
+    coords: [42.8746, 74.5698],
+    basePrice: 150,
+  });
+  const varB = selectedB || getChertezhnikVariants(cleanB, catalog)[0];
 
-  const ours = Math.round(yandex * (1 - KYRAAN_DISCOUNT) / 10) * 10;
-  const savings = yandex - ours;
+  const trafficNum = Math.max(1, parseFloat(traffic) || 1);
+  const baseSum = varA.basePrice + varB.basePrice;
+  const trafficMult = trafficNum <= 1 ? 1 : 1 + (trafficNum - 1) * 0.22;
+  const weatherMult = WEATHER_MULTIPLIERS[weather] || 1;
+  const yandexPrice = Math.round(baseSum * trafficMult * weatherMult);
+  const chertezhnikPrice = Math.round(yandexPrice * 0.9);
+  const economTotal = Math.round(chertezhnikPrice * 0.9 / 10) * 10;
+  const savings = Math.max(0, yandexPrice - economTotal);
+  const approxKm = Math.max(1, Math.round((baseSum / 35) * 10) / 10);
+
+  const payload = {
+    agent: "chertezhnik",
+    client_phone: clientPhone,
+    pointA: { area: varA.area, address: varA.address, coords: varA.coords },
+    pointB: { area: varB.area, address: varB.address, coords: varB.coords },
+    trafficIndex: trafficNum,
+    weather,
+    yandexPrice,
+    chertezhnikPrice,
+    finalPrice: economTotal,
+  };
 
   return {
-    km: Math.round(roadKm * 10) / 10,
-    boarding: t.boarding,
-    yandex,
-    total: ours,
+    varA,
+    varB,
+    trafficNum,
+    weather,
+    yandexPrice,
+    chertezhnikPrice,
+    total: economTotal,
     savings,
-    night,
+    km: approxKm,
+    payload,
   };
+}
+
+function useChertezhnikCatalog() {
+  const [catalog, setCatalog] = T.useState(DEFAULT_CHERTEZHNIK_CATALOG);
+
+  T.useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("chertezhnik_addresses")
+          .select("*");
+        if (!active || error || !Array.isArray(data) || !data.length) return;
+
+        const grouped = new Map();
+        for (const row of data) {
+          const rawKey = row.search_key || row.key || row.street || row.address || "";
+          const key = normStr(String(rawKey));
+          if (!key) continue;
+          const lat = Number(row.lat ?? row.latitude ?? 42.8746);
+          const lng = Number(row.lng ?? row.longitude ?? 74.5698);
+          const variant = {
+            area: row.area || row.district || "Бишкек / Чуйская обл.",
+            address: row.address || row.full_address || String(rawKey),
+            coords: [lat, lng],
+            basePrice: Number(row.base_price ?? row.basePrice ?? 250),
+          };
+          if (!grouped.has(key)) grouped.set(key, { keys: [key], variants: [] });
+          grouped.get(key).variants.push(variant);
+        }
+        if (grouped.size > 0) {
+          setCatalog(Array.from(grouped.values()));
+        }
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, []);
+
+  return catalog;
 }
 
 /* ============================ PHONE & FORMATTING ============================ */
@@ -431,10 +533,15 @@ function RadarCard({ request, onCancel }) {
 
 /* ============================ HOME ============================ */
 function HomeScreen({ notify, user, setTab }) {
+  const catalog = useChertezhnikCatalog();
   const [openId, setOpenId] = T.useState(null);
   const [form, setForm] = T.useState(null);
   const [pointA, setPointA] = T.useState("");
   const [pointB, setPointB] = T.useState("");
+  const [selectedA, setSelectedA] = T.useState(null);
+  const [selectedB, setSelectedB] = T.useState(null);
+  const [traffic, setTraffic] = T.useState("1.0");
+  const [weather, setWeather] = T.useState("clear");
   const [error, setError] = T.useState("");
   const [request, setRequest] = T.useState(null);
   const [scrollTo, setScrollTo] = T.useState(null);
@@ -444,15 +551,32 @@ function HomeScreen({ notify, user, setTab }) {
   const nodeRefs = T.useRef({});
 
   const isCityTaxi = form?.service?.id === "city_taxi";
+  const variantsA = isCityTaxi ? getChertezhnikVariants(pointA, catalog) : [];
+  const variantsB = isCityTaxi ? getChertezhnikVariants(pointB, catalog) : [];
   const hasPointB = Boolean(pointB.trim());
-  const estimatedKm = isCityTaxi && hasPointB ? estimateRouteKm(pointA, pointB) : null;
-  const quote = isCityTaxi && estimatedKm ? calcTaxi("Эконом", estimatedKm) : null;
+
+  const quote = isCityTaxi && hasPointB
+    ? calcChertezhnikRoute({
+        rawA: pointA,
+        rawB: pointB,
+        selectedA,
+        selectedB,
+        catalog,
+        traffic,
+        weather,
+        clientPhone: normalizePhone(user.phone),
+      })
+    : null;
 
   const openForm = (service, sub) => {
     setOpenId(service.id);
     setForm({ service, sub });
     setPointA("");
     setPointB("");
+    setSelectedA(null);
+    setSelectedB(null);
+    setTraffic("1.0");
+    setWeather("clear");
     setError("");
   };
   const closeForm = () => { setForm(null); setError(""); };
@@ -474,7 +598,9 @@ function HomeScreen({ notify, user, setTab }) {
     }
 
     setSending(true);
-    const addressStr = [pointA.trim(), pointB.trim()].filter(Boolean).join(" → ") || "Уточнить у клиента";
+    const labelA = quote ? `${quote.varA.area} (${quote.varA.address})` : pointA.trim();
+    const labelB = quote ? `${quote.varB.area} (${quote.varB.address})` : pointB.trim();
+    const addressStr = [labelA, labelB].filter(Boolean).join(" → ") || "Уточнить у клиента";
     const hunter = TRANSPORT.some((t) => t.id === form.service.id) ? "HUNTER_01" : "HUNTER_02";
 
     const row = {
@@ -490,39 +616,57 @@ function HomeScreen({ notify, user, setTab }) {
       row.price_som = quote.total;
       row.distance_km = quote.km;
       row.meta = {
-        yandex_price: quote.yandex,
-        savings: quote.savings,
+        ...quote.payload,
         tariff: "Эконом",
-        night: quote.night,
         direct_settlement: true,
         kyraan_fee: 0,
-        point_mode: "text_fields",
+        linked_agent: "chertezhnik",
         region: "bishkek_chuy",
       };
     }
 
     const { error: dbError } = await supabase.from("orders").insert([row]);
-    setSending(false);
-
     if (dbError) {
+      setSending(false);
       setError("Ошибка отправки: " + dbError.message);
       return;
     }
 
+    if (isCityTaxi && quote) {
+      try {
+        await supabase.from("chertezhnik_logs").insert([{
+          agent: "chertezhnik",
+          point_a_area: quote.varA.area,
+          point_a_address: quote.varA.address,
+          point_a_coords: quote.varA.coords,
+          point_b_area: quote.varB.area,
+          point_b_address: quote.varB.address,
+          point_b_coords: quote.varB.coords,
+          traffic_index: quote.trafficNum,
+          weather: quote.weather,
+          yandex_price: quote.yandexPrice,
+          discount_percent: 10,
+          final_price: quote.total,
+          raw_payload: quote.payload,
+        }]);
+      } catch {}
+    }
+
+    setSending(false);
     setRequest({
       serviceId: form.service.id,
       serviceTitle: form.service.title,
       icon: form.service.icon,
       sub: form.sub,
       phone: user.phone,
-      pointA,
-      pointB,
+      pointA: labelA || pointA,
+      pointB: labelB || pointB,
       total: quote ? quote.total : null,
       savings: quote ? quote.savings : null,
     });
     setForm(null);
     setError("");
-    notify("Заявка отправлена — расчёт напрямую с водителем");
+    notify("Заявка отправлена через Чертёжника — расчёт напрямую с водителем");
   };
 
   T.useEffect(() => {
@@ -547,10 +691,14 @@ function HomeScreen({ notify, user, setTab }) {
     children: quote ? [
       p("div", { className: "flex items-center justify-between", children: [
         a("span", { className: "text-[13px] text-[var(--muted)]", children: "Яндекс.Такси (Эконом)" }),
-        a("span", { className: "text-[15px] font-bold text-[var(--muted)] line-through", children: quote.yandex + " сом" }),
+        a("span", { className: "text-[15px] font-bold text-[var(--muted)] line-through", children: quote.yandexPrice + " сом" }),
+      ] }),
+      p("div", { className: "mt-1.5 flex items-center justify-between", children: [
+        a("span", { className: "text-[13px] text-[var(--muted)]", children: "Чертёжник (−10%)" }),
+        a("span", { className: "text-[14px] font-semibold text-white", children: quote.chertezhnikPrice + " сом" }),
       ] }),
       p("div", { className: "mt-2 flex items-center justify-between", children: [
-        a("span", { className: "text-[14px] font-bold", children: "У нас (Эконом)" }),
+        a("span", { className: "text-[14px] font-bold", children: "Итого для вас (Эконом)" }),
         a("span", { className: "text-[22px] font-extrabold text-[var(--gold)]", children: quote.total + " сом" }),
       ] }),
       p("div", {
@@ -559,35 +707,18 @@ function HomeScreen({ notify, user, setTab }) {
           a(Icon, { name: "sparkles", size: 16, className: "text-[var(--green)]" }),
           a("span", {
             className: "text-[13px] font-bold text-[var(--green)]",
-            children: `Вы экономите ${quote.savings} сом (−20%)`,
+            children: `Вы экономите ${quote.savings} сом · 0 сом комиссия`,
           }),
         ],
       }),
-      p("div", {
-        className: "mt-3 grid grid-cols-2 gap-2 text-[12px]",
-        children: [
-          p("div", { className: "rounded-[10px] bg-[var(--surface)] p-2.5 text-center", children: [
-            a("p", { className: "text-[var(--muted)]", children: "Посадка" }),
-            a("p", { className: "mt-0.5 font-bold", children: quote.boarding + " сом" }),
-          ] }),
-          p("div", { className: "rounded-[10px] bg-[var(--surface)] p-2.5 text-center", children: [
-            a("p", { className: "text-[var(--muted)]", children: ["Расчёт (~", quote.km, " км)"] }),
-            a("p", { className: "mt-0.5 font-bold", children: Math.max(0, quote.total - quote.boarding) + " сом" }),
-          ] }),
-        ],
-      }),
-      quote.night && a("p", {
-        className: "mt-2 text-center text-[11px] text-[var(--muted)]",
-        children: "🌙 Ночной тариф уже учтён",
-      }),
       a("p", {
         className: "mt-2 text-center text-[11px] leading-snug text-[var(--muted)]",
-        children: "Оплата напрямую водителю, комиссия 0 сом.",
+        children: `Маршрут Чертёжника: ${quote.varA.area} → ${quote.varB.area}`,
       }),
     ] : [
       a("p", {
         className: "text-center text-[12px] leading-relaxed text-[var(--muted)]",
-        children: "Заполните Точку А и Точку Б ниже — цена рассчитается автоматически.",
+        children: "Выберите или впишите Точку А и Точку Б — Чертёжник рассчитает маршрут и цену.",
       }),
     ],
   });
@@ -603,7 +734,7 @@ function HomeScreen({ notify, user, setTab }) {
       a("p", {
         className: "mt-1 text-[13px] leading-relaxed text-[var(--muted)]",
         children: isCityTaxi
-          ? "Укажите Точку А и Точку Б · −20% от Яндекса · 0 сом комиссия."
+          ? "Связано с «Чертёжником» · Точка А и Точка Б · 0 сом комиссия."
           : "Заявка будет создана от вашего номера.",
       }),
       p("div", {
@@ -620,20 +751,79 @@ function HomeScreen({ notify, user, setTab }) {
             a("label", { className: "text-[12px] font-bold text-white", children: "Точка А" }),
             a("input", {
               value: pointA,
-              onChange: (e) => setPointA(e.target.value.slice(0, 100)),
-              placeholder: "Откуда забрать (улица, дом, ориентир)",
+              onChange: (e) => { setPointA(e.target.value.slice(0, 100)); setSelectedA(null); },
+              placeholder: "Например: ул. Ленина или пр. Чуй",
+              autoComplete: "off",
               className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
+            }),
+            isCityTaxi && variantsA.length > 0 && a("div", {
+              className: "mt-2 flex flex-col gap-1.5 max-h-[160px] overflow-y-auto",
+              children: variantsA.map((v, idx) => {
+                const isSel = (selectedA ? selectedA === v : idx === 0);
+                return p("button", {
+                  type: "button",
+                  onClick: () => { setSelectedA(v); setPointA(`${v.area}, ${v.address}`); },
+                  className: `w-full rounded-[10px] border px-3 py-2 text-left text-[12px] ${isSel ? "border-[var(--green)] bg-[var(--green-soft)]" : "border-[#334155] bg-[var(--surface-2)]"}`,
+                  children: [
+                    a("span", { className: "block text-[11px] font-semibold text-[var(--green)]", children: v.area }),
+                    a("span", { className: "block text-white", children: v.address }),
+                  ],
+                }, idx);
+              }),
             }),
           ] }),
           p("div", { children: [
             a("label", { className: "text-[12px] font-bold text-white", children: "Точка Б" }),
             a("input", {
               value: pointB,
-              onChange: (e) => setPointB(e.target.value.slice(0, 100)),
-              placeholder: "Куда ехать (улица, район, город)",
+              onChange: (e) => { setPointB(e.target.value.slice(0, 100)); setSelectedB(null); },
+              placeholder: "Например: Кант или пр. Чуй",
+              autoComplete: "off",
               className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
             }),
+            isCityTaxi && variantsB.length > 0 && a("div", {
+              className: "mt-2 flex flex-col gap-1.5 max-h-[160px] overflow-y-auto",
+              children: variantsB.map((v, idx) => {
+                const isSel = (selectedB ? selectedB === v : idx === 0);
+                return p("button", {
+                  type: "button",
+                  onClick: () => { setSelectedB(v); setPointB(`${v.area}, ${v.address}`); },
+                  className: `w-full rounded-[10px] border px-3 py-2 text-left text-[12px] ${isSel ? "border-[var(--green)] bg-[var(--green-soft)]" : "border-[#334155] bg-[var(--surface-2)]"}`,
+                  children: [
+                    a("span", { className: "block text-[11px] font-semibold text-[var(--green)]", children: v.area }),
+                    a("span", { className: "block text-white", children: v.address }),
+                  ],
+                }, idx);
+              }),
+            }),
           ] }),
+          isCityTaxi && p("div", {
+            className: "grid grid-cols-2 gap-2.5",
+            children: [
+              p("div", { children: [
+                a("label", { className: "text-[12px] text-[var(--muted)]", children: "Пробки (1.0–10)" }),
+                a("input", {
+                  type: "number", step: "0.1", min: "1", max: "10", value: traffic,
+                  onChange: (e) => setTraffic(e.target.value),
+                  className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3 text-[14px] outline-none",
+                }),
+              ] }),
+              p("div", { children: [
+                a("label", { className: "text-[12px] text-[var(--muted)]", children: "Погода" }),
+                a("select", {
+                  value: weather,
+                  onChange: (e) => setWeather(e.target.value),
+                  className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3 text-[14px] outline-none",
+                  children: [
+                    a("option", { value: "clear", children: "Ясно / сухо" }),
+                    a("option", { value: "rain", children: "Дождь / мокро" }),
+                    a("option", { value: "snow", children: "Снег / гололёд" }),
+                    a("option", { value: "fog", children: "Туман" }),
+                  ],
+                }),
+              ] }),
+            ],
+          }),
         ],
       }),
       taxiQuoteBlock,
@@ -714,7 +904,7 @@ function HomeScreen({ notify, user, setTab }) {
       a("h2", { className: "text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]", children: "HUNTER 01 · Транспорт" }),
       a("span", { className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]", children: [TRANSPORT.length, " услуги"] }),
     ] }),
-    a("p", { className: "mt-2 rounded-[12px] bg-[var(--gold-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--gold)]", children: "Такси — Эконом (−20% от Яндекса, Точка А и Точка Б текстом, 0% комиссия)" }),
+    a("p", { className: "mt-2 rounded-[12px] bg-[var(--gold-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--gold)]", children: "Такси — Эконом (связано с Чертёжником · Точка А и Б · 0% комиссия)" }),
     a("div", { className: "mt-3 flex flex-col gap-3", children: TRANSPORT.map((svc) => {
       const isOpen = openId === svc.id;
       return p("section", { ref: (el) => { nodeRefs.current[svc.id] = el; }, className: "rounded-[16px] bg-[#1E1E1E] p-4", children: [
@@ -723,7 +913,7 @@ function HomeScreen({ notify, user, setTab }) {
             a("span", { className: "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: svc.icon, size: 22, className: "text-[var(--gold)]" }) }),
             p("span", { className: "min-w-0 flex-1", children: [
               a("span", { className: "block text-[16px] font-bold leading-snug text-white", children: svc.title }),
-              p("span", { className: "mt-1 block text-[12px] text-[var(--muted)]", children: svc.id === "city_taxi" ? "Тариф Эконом · −20% от Яндекса · 0% комиссия" : [svc.subs.length, " вариантов"] }),
+              p("span", { className: "mt-1 block text-[12px] text-[var(--muted)]", children: svc.id === "city_taxi" ? "Тариф Эконом · Чертёжник · 0% комиссия" : [svc.subs.length, " вариантов"] }),
             ] }),
           ] }),
           a("button", { type: "button", onClick: (e) => { e.preventDefault(); e.stopPropagation(); setOpenId(isOpen ? null : svc.id); }, "aria-label": isOpen ? "Свернуть" : "Развернуть", className: "flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]", children: a(Icon, { name: "chevronDown", size: 18, className: isOpen ? "rotate-180 transition" : "" }) }),
@@ -749,30 +939,8 @@ function HomeScreen({ notify, user, setTab }) {
 }
 
 /* ============================ CHERTEZHNIK ============================ */
-const DEFAULT_CHERTEZHNIK_CATALOG = [
-  {
-    keys: ["ленина", "ул. ленина", "улица ленина"],
-    variants: [
-      { area: "Бишкек — Свердловский район", address: "улица Ленина, 150", coords: [42.8782, 74.6145], basePrice: 240 },
-      { area: "Бишкек — Первомайский район", address: "улица Ленина, 150", coords: [42.8691, 74.5812], basePrice: 260 },
-      { area: "Бишкек — Октябрьский район", address: "улица Ленина, 150", coords: [42.8520, 74.6298], basePrice: 255 },
-      { area: "Бишкек — Ак-Орго", address: "улица Ленина, Ак-Орго", coords: [42.8495, 74.5310], basePrice: 290 },
-      { area: "Чуйская обл. — Покровка", address: "улица Ленина, с. Покровка", coords: [42.8740, 74.8420], basePrice: 420 },
-      { area: "Чуйская обл. — Кант", address: "улица Ленина, г. Кант", coords: [42.8910, 74.8510], basePrice: 450 },
-    ],
-  },
-  {
-    keys: ["чуй", "пр. чуй", "проспект чуй"],
-    variants: [
-      { area: "Бишкек — Первомайский район", address: "проспект Чуй, 120", coords: [42.8758, 74.5950], basePrice: 210 },
-      { area: "Бишкек — Свердловский район", address: "проспект Чуй, 120", coords: [42.8764, 74.6210], basePrice: 220 },
-      { area: "Чуйская обл. — Кант", address: "проспект Чуй, г. Кант", coords: [42.8902, 74.8501], basePrice: 440 },
-    ],
-  },
-];
-
 function ChertezhnikScreen({ notify, user }) {
-  const [catalog, setCatalog] = T.useState(DEFAULT_CHERTEZHNIK_CATALOG);
+  const catalog = useChertezhnikCatalog();
   const [pointA, setPointA] = T.useState("");
   const [pointB, setPointB] = T.useState("");
   const [selectedA, setSelectedA] = T.useState(null);
@@ -783,71 +951,8 @@ function ChertezhnikScreen({ notify, user }) {
   const [logStatus, setLogStatus] = T.useState({ type: "", text: "" });
   const [saving, setSaving] = T.useState(false);
 
-  const weatherMultipliers = { clear: 1.0, rain: 1.15, snow: 1.3, fog: 1.1 };
-  const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
-
-  T.useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("chertezhnik_addresses")
-          .select("*");
-        if (!active || error || !Array.isArray(data) || !data.length) return;
-
-        const grouped = new Map();
-        for (const row of data) {
-          const rawKey = row.search_key || row.key || row.street || row.address || "";
-          const key = norm(String(rawKey));
-          if (!key) continue;
-          const lat = Number(row.lat ?? row.latitude ?? 42.8746);
-          const lng = Number(row.lng ?? row.longitude ?? 74.5698);
-          const variant = {
-            area: row.area || row.district || "Бишкек / Чуйская обл.",
-            address: row.address || row.full_address || String(rawKey),
-            coords: [lat, lng],
-            basePrice: Number(row.base_price ?? row.basePrice ?? 250),
-          };
-          if (!grouped.has(key)) grouped.set(key, { keys: [key], variants: [] });
-          grouped.get(key).variants.push(variant);
-        }
-        if (grouped.size > 0) {
-          setCatalog(Array.from(grouped.values()));
-        }
-      } catch {}
-    })();
-    return () => { active = false; };
-  }, []);
-
-  const getVariants = (raw) => {
-    const q = norm(raw);
-    if (!q) return [];
-    for (const item of catalog) {
-      if (item.keys.some((k) => q.includes(k) || k.includes(q))) {
-        return item.variants;
-      }
-    }
-    const fallbackAreas = [
-      "Бишкек — Свердловский район",
-      "Бишкек — Первомайский район",
-      "Бишкек — Октябрьский район",
-      "Бишкек — Ленинский район",
-      "Бишкек — Ак-Орго",
-      "Чуйская обл. — Покровка",
-      "Чуйская обл. — Кант",
-    ];
-    return fallbackAreas.map((area, i) => ({
-      area,
-      address: raw.trim(),
-      coords: [42.87 + i * 0.004, 74.60 + i * 0.015],
-      basePrice: 250 + i * 25,
-    }));
-  };
-
-  const variantsA = getVariants(pointA);
-  const variantsB = getVariants(pointB);
-  const activeA = selectedA || variantsA[0] || null;
-  const activeB = selectedB || variantsB[0] || null;
+  const variantsA = getChertezhnikVariants(pointA, catalog);
+  const variantsB = getChertezhnikVariants(pointB, catalog);
 
   const calculateAndLog = async () => {
     const rawA = pointA.trim();
@@ -857,46 +962,37 @@ function ChertezhnikScreen({ notify, user }) {
       return;
     }
 
-    const varA = activeA || getVariants(rawA)[0];
-    const varB = activeB || getVariants(rawB)[0];
-    const trafficNum = Math.max(1, parseFloat(traffic) || 1);
-    const baseSum = varA.basePrice + varB.basePrice;
-    const trafficMult = trafficNum <= 1 ? 1 : 1 + (trafficNum - 1) * 0.22;
-    const weatherMult = weatherMultipliers[weather] || 1;
-    const yandexPrice = Math.round(baseSum * trafficMult * weatherMult);
-    const finalPrice = Math.round(yandexPrice * 0.9);
-
-    const payload = {
-      agent: "chertezhnik",
-      client_phone: normalizePhone(user.phone),
-      pointA: { area: varA.area, address: varA.address, coords: varA.coords },
-      pointB: { area: varB.area, address: varB.address, coords: varB.coords },
-      trafficIndex: trafficNum,
+    const res = calcChertezhnikRoute({
+      rawA,
+      rawB,
+      selectedA,
+      selectedB,
+      catalog,
+      traffic,
       weather,
-      yandexPrice,
-      discountPercent: 10,
-      finalPrice,
-    };
+      clientPhone: normalizePhone(user.phone),
+    });
+    if (!res) return;
 
-    setCalcResult({ varA, varB, trafficNum, weather, yandexPrice, finalPrice, payload });
+    setCalcResult(res);
     setSaving(true);
     setLogStatus({ type: "warn", text: "Supabase: запись лога в chertezhnik_logs…" });
 
     try {
       const { error } = await supabase.from("chertezhnik_logs").insert([{
-        agent: payload.agent,
-        point_a_area: payload.pointA.area,
-        point_a_address: payload.pointA.address,
-        point_a_coords: payload.pointA.coords,
-        point_b_area: payload.pointB.area,
-        point_b_address: payload.pointB.address,
-        point_b_coords: payload.pointB.coords,
-        traffic_index: payload.trafficIndex,
-        weather: payload.weather,
-        yandex_price: payload.yandexPrice,
-        discount_percent: payload.discountPercent,
-        final_price: payload.finalPrice,
-        raw_payload: payload,
+        agent: res.payload.agent,
+        point_a_area: res.payload.pointA.area,
+        point_a_address: res.payload.pointA.address,
+        point_a_coords: res.payload.pointA.coords,
+        point_b_area: res.payload.pointB.area,
+        point_b_address: res.payload.pointB.address,
+        point_b_coords: res.payload.pointB.coords,
+        traffic_index: res.payload.trafficIndex,
+        weather: res.payload.weather,
+        yandex_price: res.payload.yandexPrice,
+        discount_percent: 10,
+        final_price: res.payload.finalPrice,
+        raw_payload: res.payload,
       }]);
 
       if (error) {
@@ -924,636 +1020,4 @@ function ChertezhnikScreen({ notify, user }) {
           p("div", {
             className: "mt-4",
             children: [
-              a("label", { htmlFor: "chPointA", className: "text-[12px] text-[var(--muted)]", children: "Точка А (откуда)" }),
-              a("input", {
-                id: "chPointA",
-                type: "text",
-                value: pointA,
-                onChange: (e) => { setPointA(e.target.value); setSelectedA(null); },
-                placeholder: "Например: ул. Ленина",
-                autoComplete: "off",
-                className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
-              }),
-              variantsA.length > 0 && a("div", {
-                className: "mt-2 flex flex-col gap-1.5 max-h-[220px] overflow-y-auto",
-                children: variantsA.map((v, idx) => {
-                  const isSel = (selectedA ? selectedA === v : idx === 0);
-                  return p("button", {
-                    type: "button",
-                    onClick: () => setSelectedA(v),
-                    className: `w-full rounded-[12px] border px-3 py-2.5 text-left text-[13px] ${isSel ? "border-[var(--green)] bg-[var(--green-soft)]" : "border-[#334155] bg-[var(--surface-2)]"}`,
-                    children: [
-                      a("span", { className: "block text-[11px] font-semibold text-[var(--green)]", children: v.area }),
-                      a("span", { className: "block text-white", children: v.address }),
-                    ],
-                  }, idx);
-                }),
-              }),
-            ],
-          }),
-
-          p("div", {
-            className: "mt-3",
-            children: [
-              a("label", { htmlFor: "chPointB", className: "text-[12px] text-[var(--muted)]", children: "Точка Б (куда)" }),
-              a("input", {
-                id: "chPointB",
-                type: "text",
-                value: pointB,
-                onChange: (e) => { setPointB(e.target.value); setSelectedB(null); },
-                placeholder: "Например: пр. Чуй или Кант",
-                autoComplete: "off",
-                className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
-              }),
-              variantsB.length > 0 && a("div", {
-                className: "mt-2 flex flex-col gap-1.5 max-h-[220px] overflow-y-auto",
-                children: variantsB.map((v, idx) => {
-                  const isSel = (selectedB ? selectedB === v : idx === 0);
-                  return p("button", {
-                    type: "button",
-                    onClick: () => setSelectedB(v),
-                    className: `w-full rounded-[12px] border px-3 py-2.5 text-left text-[13px] ${isSel ? "border-[var(--green)] bg-[var(--green-soft)]" : "border-[#334155] bg-[var(--surface-2)]"}`,
-                    children: [
-                      a("span", { className: "block text-[11px] font-semibold text-[var(--green)]", children: v.area }),
-                      a("span", { className: "block text-white", children: v.address }),
-                    ],
-                  }, idx);
-                }),
-              }),
-            ],
-          }),
-
-          p("div", {
-            className: "mt-3 grid grid-cols-2 gap-2.5",
-            children: [
-              p("div", {
-                children: [
-                  a("label", { htmlFor: "chTraffic", className: "text-[12px] text-[var(--muted)]", children: "Пробки (1.0–10)" }),
-                  a("input", {
-                    id: "chTraffic",
-                    type: "number",
-                    step: "0.1",
-                    min: "1",
-                    max: "10",
-                    value: traffic,
-                    onChange: (e) => setTraffic(e.target.value),
-                    className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
-                  }),
-                ],
-              }),
-              p("div", {
-                children: [
-                  a("label", { htmlFor: "chWeather", className: "text-[12px] text-[var(--muted)]", children: "Погода" }),
-                  a("select", {
-                    id: "chWeather",
-                    value: weather,
-                    onChange: (e) => setWeather(e.target.value),
-                    className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none",
-                    children: [
-                      a("option", { value: "clear", children: "Ясно / сухо" }),
-                      a("option", { value: "rain", children: "Дождь / мокро" }),
-                      a("option", { value: "snow", children: "Снег / гололёд" }),
-                      a("option", { value: "fog", children: "Туман / плохая видимость" }),
-                    ],
-                  }),
-                ],
-              }),
-            ],
-          }),
-
-          a("button", {
-            type: "button",
-            onClick: calculateAndLog,
-            disabled: saving,
-            className: "mt-4 w-full rounded-[12px] bg-[var(--green)] py-3.5 text-[14px] font-extrabold text-black disabled:opacity-40",
-            children: saving ? "Сохранение…" : "Рассчитать для мозг-агента",
-          }),
-        ],
-      }),
-
-      calcResult && p("section", {
-        className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4",
-        children: [
-          p("p", {
-            className: "text-[13px] leading-relaxed text-[var(--muted)]",
-            children: [
-              a("strong", { className: "text-white", children: "Точка А: " }),
-              `${calcResult.varA.area} — ${calcResult.varA.address}`,
-              a("br", {}),
-              a("strong", { className: "text-white", children: "Точка Б: " }),
-              `${calcResult.varB.area} — ${calcResult.varB.address}`,
-            ],
-          }),
-          a("p", {
-            className: "mt-2 text-[24px] font-extrabold text-[var(--green)]",
-            children: `${calcResult.finalPrice} сом (−10% от Яндекса)`,
-          }),
-          p("p", {
-            className: "mt-1 text-[12px] leading-relaxed text-[var(--muted)] break-all",
-            children: [
-              `Яндекс с учётом пробок (${calcResult.trafficNum}) и погоды (${calcResult.weather}): ${calcResult.yandexPrice} сом`,
-              a("br", {}),
-              a("code", { className: "text-[11px] text-[#cbd5e1]", children: JSON.stringify(calcResult.payload) }),
-            ],
-          }),
-          logStatus.text && a("p", {
-            className: `mt-2 text-[12px] font-semibold ${logStatus.type === "ok" ? "text-[var(--green)]" : "text-[#facc15]"}`,
-            children: logStatus.text,
-          }),
-        ],
-      }),
-    ],
-  });
-}
-
-/* ============================ TAXI ============================ */
-function TaxiScreen({ notify }) {
-  const [trips] = T.useState([
-    { id: "t-1", route: "osh-bishkek", driver: "Азамат", car: "Sprinter, белый (Эконом)", seats: 8, phone: "+996700111222", departure: new Date(Date.now() + 45*60000).toISOString() },
-    { id: "t-2", route: "osh-bishkek", driver: "Нурлан", car: "Sprinter 2-скат (Эконом)", seats: 6, phone: "+996555333444", departure: new Date(Date.now() + 90*60000).toISOString() },
-    { id: "t-3", route: "bishkek-almaty", driver: "Бакыт", car: "Atego, крытый (Эконом)", seats: 4, phone: "+996777555666", departure: new Date(Date.now() + 60*60000).toISOString() },
-    { id: "t-4", route: "bishkek-almaty", driver: "Эрмек", car: "Sprinter+прицеп (Эконом)", seats: 10, phone: "+996700999888", departure: new Date(Date.now() + 120*60000).toISOString() },
-  ]);
-  const [route, setRoute] = T.useState("osh-bishkek");
-  const [now, setNow] = T.useState(Date.now());
-
-  T.useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 15000);
-    return () => clearInterval(id);
-  }, []);
-
-  const active = T.useMemo(() => trips.filter((t) => t.route === route && new Date(t.departure).getTime() - now > 60000), [trips, route, now]);
-  const counts = T.useMemo(() => {
-    const acc = { "osh-bishkek": 0, "bishkek-almaty": 0 };
-    trips.forEach((t) => { if (new Date(t.departure).getTime() - now > 60000) acc[t.route] += 1; });
-    return acc;
-  }, [trips, now]);
-
-  const current = routeById(route);
-
-  return p("div", { className: "flex flex-1 flex-col pb-2", children: [
-    p("section", { className: "rounded-[16px] bg-[var(--surface)] p-4", children: [
-      p("div", { className: "flex items-start justify-between gap-3", children: [
-        p("div", { children: [
-          a("h1", { className: "text-[24px] font-extrabold leading-tight", children: "Межгород Такси" }),
-          a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: "Тариф Эконом · прямой расчёт с водителем" }),
-        ] }),
-        p("span", { className: "shrink-0 rounded-full bg-[var(--surface-2)] px-3 py-1.5 text-[12px] font-semibold", children: ["Активных: ", counts[route]] }),
-      ] }),
-      p("div", { className: "mt-4", children: [
-        a("p", { className: "text-[12px] font-semibold text-[var(--muted)]", children: "Маршрут" }),
-        a("div", { className: "mt-2 grid grid-cols-2 gap-2", children: ROUTES.map((r) => p("button", { type: "button", onClick: () => setRoute(r.id), "aria-pressed": route === r.id, className: `rounded-[12px] px-3 py-3 text-left ${route === r.id ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-white"}`, children: [
-          a("span", { className: "block text-[14px] font-bold leading-snug", children: r.label }),
-          a("span", { className: `mt-1 block text-[11px] font-semibold ${route === r.id ? "text-black/70" : "text-[var(--muted)]"}`, children: r.note }),
-        ] }, r.id)) }),
-      ] }),
-    ] }),
-    active.length === 0 ? p("section", { className: "mt-3 flex flex-col items-center rounded-[16px] bg-[var(--surface)] p-6 text-center", children: [
-      a("div", { className: "flex h-16 w-16 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: "car", size: 26, className: "text-[var(--gold)]" }) }),
-      a("h2", { className: "mt-5 text-[19px] font-bold", children: "Пока нет активных поездок" }),
-      p("p", { className: "mt-2 max-w-[300px] text-[13px] leading-relaxed text-[var(--muted)]", children: ["Маршрут: ", current.label, ". Загляните позже."] }),
-    ] }) : p("div", { className: "mt-3 flex flex-col gap-3", children: [
-      p("p", { className: "text-[12px] uppercase tracking-[0.14em] text-[var(--muted)]", children: ["Активные поездки · ", active.length] }),
-      active.map((trip) => p("article", { className: "rounded-[16px] bg-[var(--surface)] p-4", children: [
-        a("div", { className: "flex items-center gap-2", children: p("span", { className: "flex items-center gap-1.5 rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[12px] font-semibold", children: [a(Icon, { name: "mapPin", size: 13, className: "text-[var(--gold)]" }), " ", current.label] }) }),
-        p("div", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-          p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Водитель" }), a("p", { className: "mt-1 text-[13px] font-bold", children: trip.driver }) ] }),
-          p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Машина" }), a("p", { className: "mt-1 text-[13px] font-bold", children: trip.car }) ] }),
-          p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Время" }), p("p", { className: "mt-1 flex items-center gap-1 text-[13px] font-bold", children: [a(Icon, { name: "clock", size: 13 }), " ", formatTime(trip.departure)] }) ] }),
-          p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Мест" }), p("p", { className: "mt-1 flex items-center gap-1 text-[13px] font-bold", children: [a(Icon, { name: "users", size: 13 }), " ", trip.seats] }) ] }),
-        ] }),
-        p("a", { href: telHref(trip.phone), onClick: () => notify("Звонок водителю: " + trip.driver), className: "mt-3 flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black", children: [a(Icon, { name: "phone", size: 16 }), " Позвонить"] }),
-      ] }, trip.id)),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      p("div", { className: "flex items-start gap-3", children: [
-        a("div", { className: "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: "car", size: 22, className: "text-[var(--gold)]" }) }),
-        p("div", { children: [
-          a("h2", { className: "text-[18px] font-extrabold leading-snug", children: "Вы водитель?" }),
-          a("p", { className: "mt-2 text-[14px] leading-relaxed text-[var(--text)]", children: "Работа в режиме Эконом · прямой расчёт с клиентом, комиссия KYRAAN — 0 сом." }),
-        ] }),
-      ] }),
-      a("a", { href: driverRegLink(current.label), target: "_blank", rel: "noopener noreferrer", className: "mt-4 flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--green)] px-3 py-4 text-center text-[14px] font-bold text-black", children: [a(Icon, { name: "messageCircle", size: 18 }), " Написать Админу — WhatsApp ", ADMIN_PHONE] }),
-    ] }),
-  ] });
-}
-
-/* ============================ WORKERS ============================ */
-function WorkersScreen({ notify, user }) {
-  const [workers, setWorkers] = T.useState([]);
-  const [loading, setLoading] = T.useState(true);
-  const [filter, setFilter] = T.useState("all");
-  const [open, setOpen] = T.useState(false);
-  const [form, setForm] = T.useState({ name: user.name || "", skill: "", skillOther: "", city: "" });
-  const [errors, setErrors] = T.useState({});
-  const [submitting, setSubmitting] = T.useState(false);
-
-  const skill = form.skill === "Другое" ? form.skillOther.trim() : form.skill.trim();
-
-  const loadWorkers = async () => {
-    const { data } = await supabase.from("orders")
-      .select("*")
-      .eq("service_id", "workers")
-      .order("created_at", { ascending: false });
-
-    if (data) {
-      setWorkers(data.map((o) => {
-        const parts = (o.address || "").split(" | ");
-        return {
-          id: o.id,
-          name: parts[0] || "Без имени",
-          city: parts[1] || "",
-          skill: o.variant_id,
-          kind: o.variant_id,
-          phone: o.client_phone,
-        };
-      }));
-    }
-    setLoading(false);
-  };
-
-  T.useEffect(() => { loadWorkers(); }, []);
-
-  const submit = async () => {
-    const err = {};
-    if (!form.name.trim()) err.name = "Укажите имя";
-    if (!skill) err.skill = "Выберите навык";
-    setErrors(err);
-    if (Object.keys(err).length) return;
-
-    setSubmitting(true);
-    const { error } = await supabase.from("orders").insert([{
-      service_id: "workers",
-      variant_id: skill,
-      client_phone: normalizePhone(user.phone),
-      address: `${form.name.trim()} | ${form.city.trim() || "Город не указан"}`,
-      hunter: "BOARD",
-      status: "NEW",
-    }]);
-    setSubmitting(false);
-
-    if (error) {
-      notify("Ошибка: " + error.message);
-      return;
-    }
-
-    setForm({ name: user.name || "", skill: "", skillOther: "", city: "" });
-    setOpen(false);
-    notify("Объявление опубликовано!");
-    loadWorkers();
-  };
-
-  const visible = workers.filter((w) => filter === "all" || (w.kind || w.skill) === filter);
-
-  return p("div", { className: "flex flex-1 flex-col pb-2", children: [
-    p("section", { className: "rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("div", { className: "flex items-start justify-between gap-3", children: [
-        a("div", { children: [
-          a("h1", { className: "text-[24px] font-extrabold leading-tight", children: "Разнорабочие" }),
-          a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: "Самостоятельная подача объявления" }),
-        ] }),
-        a("span", { className: "shrink-0 rounded-full bg-[var(--green-soft)] px-3 py-1.5 text-[12px] font-bold text-[var(--green)]", children: "Бесплатно" }),
-      ] }),
-      a("button", { type: "button", onClick: () => setOpen((v) => !v), "aria-expanded": open, className: "mt-3 flex w-full items-center justify-center rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black", children: open ? "Свернуть" : "+ Подать объявление бесплатно" }),
-    ] }),
-    open && p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[19px] font-extrabold", children: "Новое объявление" }),
-      a("p", { className: "mt-1 text-[12px] text-[var(--muted)]", children: "Заполните данные. Объявление появится сразу." }),
-      p("div", { className: "mt-3 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-2.5", children: [
-        a(Icon, { name: "phone", size: 14, className: "text-[var(--gold)]" }),
-        a("span", { className: "text-[13px] font-semibold", children: user.phone }),
-      ] }),
-      p("div", { className: "mt-3", children: [
-        a("label", { className: "text-[12px] text-[var(--muted)]", children: "Имя *" }),
-        a("input", { maxLength: 50, value: form.name, onChange: (e) => setForm((prev) => ({ ...prev, name: e.target.value })), placeholder: "Ваше имя", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-        errors.name && a("p", { className: "mt-1 text-[12px] text-[var(--red)]", children: errors.name }),
-      ] }),
-      p("div", { className: "mt-3", children: [
-        a("label", { className: "text-[12px] text-[var(--muted)]", children: "Город" }),
-        a("input", { maxLength: 50, value: form.city, onChange: (e) => setForm((prev) => ({ ...prev, city: e.target.value })), placeholder: "Бишкек", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      ] }),
-      a("div", { className: "mt-3", children: [
-        a("span", { className: "text-[12px] text-[var(--muted)]", children: "Навык *" }),
-        a("div", { className: "mt-2 flex flex-wrap gap-2", children: ["Грузчик", "Разнорабочий", "Другое"].map((k) => a("button", { type: "button", onClick: () => setForm((prev) => ({ ...prev, skill: k })), "aria-pressed": form.skill === k, className: `rounded-full px-4 py-2.5 text-[13px] font-semibold ${form.skill === k ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: k }, k)) }),
-        form.skill === "Другое" && a("input", { maxLength: 40, value: form.skillOther, onChange: (e) => setForm((prev) => ({ ...prev, skillOther: e.target.value })), placeholder: "Укажите навык", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-        errors.skill && a("p", { className: "mt-1 text-[12px] text-[var(--red)]", children: errors.skill }),
-      ] }),
-      a("button", { type: "button", onClick: submit, disabled: submitting, className: "mt-4 w-full rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black disabled:opacity-40", children: submitting ? "Отправка..." : "Опубликовать" }),
-      a("button", { type: "button", onClick: () => setOpen(false), className: "mt-2 w-full py-2 text-[13px] text-[var(--muted)]", children: "Отмена" }),
-    ] }),
-    p("div", { className: "no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1", role: "group", children: [{ id: "all", label: "Все" }, { id: "Грузчик", label: "Грузчики" }, { id: "Разнорабочий", label: "Разнорабочие" }, { id: "Другое", label: "Другое" }].map((k) => a("button", { type: "button", onClick: () => setFilter(k.id), "aria-pressed": filter === k.id, className: `shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold ${filter === k.id ? "bg-[var(--gold)] text-black" : "bg-[var(--surface)] text-[var(--muted)]"}`, children: k.label }, k.id)) }),
-    loading ? a("div", { className: "mt-10 flex justify-center", children: a("div", { className: "loader" }) }) : visible.length === 0 ? a("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-6 text-center", children: a("p", { className: "text-[13px] text-[var(--muted)]", children: "Пока нет опубликованных объявлений." }) }) : p("div", { className: "mt-3 flex flex-col gap-3", children: visible.map((w) => a("article", { className: "rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("p", { className: "text-[16px] font-bold", children: w.name + " • " + w.skill }),
-      a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: w.city || "Город не указан" }),
-      a("p", { className: "mt-2 text-[13px] font-semibold", children: w.phone }),
-      a("a", { href: telHref(w.phone), className: "mt-3 flex w-full items-center justify-center rounded-[12px] bg-[var(--green)] py-3 text-[14px] font-bold text-black", children: "Позвонить" }),
-    ] }, w.id)) }),
-  ] });
-}
-
-/* ============================ MARKET ============================ */
-function MarketList({ ads, onOpen, onAdd }) {
-  const [filter, setFilter] = T.useState("all");
-  const filtered = filter === "all" ? ads : ads.filter((d) => d.category === filter);
-
-  return p("div", { className: "flex flex-1 flex-col", children: [
-    p("div", { className: "mt-4 flex items-start justify-between gap-3", children: [
-      p("div", { children: [ a("h1", { className: "text-[24px] font-extrabold leading-tight", children: "Объявления" }), a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: "Транспорт, продукция и сделки" }) ] }),
-      p("button", { type: "button", onClick: onAdd, className: "flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--gold)] px-4 py-3 text-[13px] font-bold text-black", children: [a(Icon, { name: "plus", size: 16 }), " Подать"] }),
-    ] }),
-    p("div", { className: "no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1", role: "group", children: [
-      p("button", { onClick: () => setFilter("all"), "aria-pressed": filter === "all", className: `shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold ${filter === "all" ? "bg-[var(--gold)] text-black" : "bg-[var(--surface)] text-[var(--muted)]"}`, children: ["Все · ", ads.length] }),
-      CATEGORIES.map((c) => a("button", { onClick: () => setFilter(c.id), "aria-pressed": filter === c.id, className: `shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold ${filter === c.id ? "bg-[var(--gold)] text-black" : "bg-[var(--surface)] text-[var(--muted)]"}`, children: c.short }, c.id)),
-    ] }),
-    filtered.length === 0 ? p("div", { className: "mt-4 flex flex-1 flex-col items-center justify-center rounded-[16px] bg-[var(--surface)] p-6 text-center", children: [
-      a("div", { className: "flex h-16 w-16 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: "search", size: 26, className: "text-[var(--muted)]" }) }),
-      a("h2", { className: "mt-5 text-[19px] font-bold", children: "Пока нет объявлений" }),
-    ] }) : p("div", { className: "mt-4 flex flex-col gap-3 pb-2", children: [
-      p("p", { className: "text-[12px] uppercase tracking-[0.14em] text-[var(--muted)]", children: [filtered.length, " объявлений"] }),
-      filtered.map((ad) => {
-        const cat = categoryById(ad.category);
-        return p("button", { onClick: () => onOpen(ad), className: "w-full rounded-[16px] bg-[var(--surface)] p-4 text-left", children: [
-          p("div", { className: "flex items-center gap-2", children: [
-            a("span", { className: "rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]", children: cat.short }),
-            a("span", { className: "rounded-full px-2.5 py-1 text-[11px] font-semibold bg-[var(--gold-soft)] text-[var(--gold)]", children: ad.status }),
-            p("span", { className: "ml-auto flex items-center gap-1 text-[11px] text-[var(--muted)]", children: [a(Icon, { name: "clock", size: 12 }), " ", formatDate(ad.created_at)] }),
-          ] }),
-          p("div", { className: "mt-3 flex items-start gap-3", children: [
-            a("div", { className: "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: cat.icon, size: 21, className: "text-[var(--gold)]" }) }),
-            p("div", { className: "min-w-0 flex-1", children: [
-              a("p", { className: "text-[15px] font-bold leading-snug", children: ad.title }),
-              a("p", { className: "clamp-2 mt-1 text-[13px] leading-relaxed text-[var(--muted)]", children: ad.description }),
-              a("p", { className: "mt-2 text-[13px] font-bold text-[var(--gold)]", children: formatPrice(ad) }),
-            ] }),
-            p("div", { className: "flex shrink-0 flex-col items-end gap-2", children: [
-              p("span", { className: "flex items-center gap-1 text-[12px] text-[var(--muted)]", children: [a(Icon, { name: "mapPin", size: 12 }), " ", ad.city] }),
-              a("span", { className: "flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: "arrowRight", size: 15 }) }),
-            ] }),
-          ] }),
-        ] }, ad.id);
-      }),
-    ] }),
-  ] });
-}
-
-function MarketForm({ initial, user, onCancel, onSave, notify }) {
-  const [v, setV] = T.useState({
-    category: initial?.category || "",
-    title: initial?.title || "",
-    description: initial?.description || "",
-    price: initial && !initial.negotiable ? cleanPriceForInput(initial.price) : "",
-    currency: initial?.currency || "som",
-    negotiable: initial?.negotiable || false,
-    city: initial?.city || "",
-  });
-  const [errors, setErrors] = T.useState({});
-  const [saving, setSaving] = T.useState(false);
-
-  const len = v.description.trim().length;
-  const set = (key, val) => setV((prev) => ({ ...prev, [key]: val }));
-
-  const save = async () => {
-    const e = {};
-    if (!v.category) e.category = "Выберите категорию";
-    if (!v.title.trim()) e.title = "Добавьте заголовок";
-    if (len < 50) e.description = "Нужно ещё " + Math.max(0, 50 - len) + " симв.";
-    if (!v.city.trim()) e.city = "Укажите город";
-    setErrors(e);
-    if (Object.keys(e).length) return;
-
-    setSaving(true);
-    const priceStr = v.negotiable
-      ? "Договорная"
-      : v.price
-        ? v.price + " " + (CURRENCIES.find((c) => c.id === v.currency)?.label || "сом")
-        : "Не указана";
-    const addressStr = `${v.title.trim()} | ${v.city.trim()} | ${v.description.trim()} | ${priceStr}`;
-
-    const payload = {
-      service_id: "market",
-      variant_id: v.category,
-      client_phone: normalizePhone(user.phone),
-      address: addressStr,
-      hunter: "BOARD",
-      status: "NEW",
-    };
-
-    let error = null;
-    if (initial?.id) {
-      const res = await supabase.from("orders").update(payload).eq("id", initial.id);
-      error = res.error;
-    } else {
-      const res = await supabase.from("orders").insert([payload]);
-      error = res.error;
-    }
-    setSaving(false);
-
-    if (error) {
-      notify("Ошибка сохранения: " + error.message);
-    } else {
-      onSave();
-    }
-  };
-
-  return p("div", { className: "flex flex-1 flex-col pb-4", children: [
-    p("button", { type: "button", onClick: onCancel, className: "flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]", children: [a(Icon, { name: "arrowLeft", size: 17 }), " Назад"] }),
-    a("h1", { className: "mt-4 text-[24px] font-extrabold leading-tight", children: initial ? "Редактирование" : "Подача объявления" }),
-    p("section", { className: "mt-4 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Категория" }),
-      a("div", { className: "mt-3 grid gap-2", children: CATEGORIES.map((c) => p("button", { onClick: () => set("category", c.id), className: `flex items-center gap-3 rounded-[12px] p-3 text-left ${v.category === c.id ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)]"}`, children: [
-        a("span", { className: `flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${v.category === c.id ? "bg-black/15" : "bg-[var(--surface)]"}`, children: a(Icon, { name: c.icon, size: 18 }) }),
-        p("span", { className: "min-w-0", children: [ a("span", { className: "block text-[14px] font-bold leading-snug", children: c.short }), a("span", { className: `block text-[12px] ${v.category === c.id ? "text-black/70" : "text-[var(--muted)]"}`, children: c.hint }) ] }),
-      ] }, c.id)) }),
-      errors.category && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.category }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      p("div", { className: "flex items-center justify-between", children: [ a("label", { className: "text-[15px] font-bold", children: "Заголовок" }), p("span", { className: "text-[12px] text-[var(--muted)]", children: [v.title.length, " / 50"] }) ] }),
-      a("input", { maxLength: 50, value: v.title, onChange: (e) => set("title", e.target.value), placeholder: "Например: Перевозка овощей", className: "mt-3 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      errors.title && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.title }),
-      p("div", { className: "mt-4 flex items-center justify-between", children: [ a("label", { className: "text-[15px] font-bold", children: "Описание" }), p("span", { className: `text-[12px] ${len >= 50 ? "text-[var(--green)]" : "text-[var(--muted)]"}`, children: [len, " / мин. 50"] }) ] }),
-      a("textarea", { rows: 5, value: v.description, onChange: (e) => set("description", e.target.value), placeholder: "Опишите груз, маршрут, сроки...", className: "mt-3 w-full resize-none rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] leading-relaxed outline-none" }),
-      errors.description && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.description }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Цена" }),
-      p("div", { className: "mt-3 flex gap-2", children: [
-        a("button", { onClick: () => set("negotiable", false), className: `flex-1 rounded-[12px] px-3 py-3 text-[13px] font-bold ${!v.negotiable ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: "Указать" }),
-        a("button", { onClick: () => set("negotiable", true), className: `flex-1 rounded-[12px] px-3 py-3 text-[13px] font-bold ${v.negotiable ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: "Договорная" }),
-      ] }),
-      !v.negotiable && a("input", { inputMode: "decimal", value: v.price, onChange: (e) => set("price", e.target.value.replace(/[^0-9.,]/g, "")), placeholder: "15000", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      a("div", { className: "mt-2 flex flex-wrap gap-2", children: CURRENCIES.map((c) => a("button", { onClick: () => set("currency", c.id), className: `rounded-full px-4 py-2.5 text-[13px] font-semibold ${v.currency === c.id && !v.negotiable ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: c.label }, c.id)) }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Город и контакты" }),
-      a("label", { className: "mt-4 block text-[12px] text-[var(--muted)]", children: "Город" }),
-      a("input", { value: v.city, onChange: (e) => set("city", e.target.value), placeholder: "Бишкек", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      errors.city && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.city }),
-      a("label", { className: "mt-4 block text-[12px] text-[var(--muted)]", children: "Телефон" }),
-      p("div", { className: "mt-2 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-3.5", children: [
-        a(Icon, { name: "phone", size: 14, className: "text-[var(--gold)]" }),
-        a("span", { className: "text-[14px] font-semibold", children: user.phone }),
-        a("span", { className: "ml-auto text-[11px] text-[var(--muted)]", children: "из профиля" }),
-      ] }),
-    ] }),
-    a("button", { onClick: save, disabled: saving, className: "mt-5 w-full rounded-[16px] bg-[var(--gold)] py-4 text-[15px] font-bold text-black disabled:opacity-40", children: saving ? "Сохранение..." : (initial ? "Сохранить изменения" : "Опубликовать") }),
-    a("button", { onClick: onCancel, className: "mt-2 w-full py-2 text-[13px] text-[var(--muted)]", children: "Отмена" }),
-  ] });
-}
-
-function MarketDetails({ ad, onBack, onEdit, onDelete }) {
-  const cat = categoryById(ad.category);
-  const [confirmDelete, setConfirmDelete] = T.useState(false);
-
-  return p("div", { className: "flex flex-1 flex-col pb-4", children: [
-    p("button", { onClick: onBack, className: "flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]", children: [a(Icon, { name: "arrowLeft", size: 17 }), " Назад"] }),
-    p("section", { className: "mt-4 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      p("div", { className: "flex items-start gap-3", children: [
-        a("div", { className: "flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: cat.icon, size: 24, className: "text-[var(--gold)]" }) }),
-        p("div", { className: "min-w-0", children: [ a("h1", { className: "text-[21px] font-extrabold leading-tight", children: ad.title }), a("p", { className: "mt-2 text-[14px] font-bold text-[var(--gold)]", children: formatPrice(ad) }) ] }),
-      ] }),
-      p("div", { className: "mt-4 grid grid-cols-3 gap-2 text-center", children: [
-        p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Категория" }), a("p", { className: "mt-1 text-[12px] font-bold leading-tight", children: cat.short }) ] }),
-        p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Город" }), a("p", { className: "mt-1 text-[12px] font-bold leading-tight", children: ad.city }) ] }),
-        p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Дата" }), a("p", { className: "mt-1 text-[12px] font-bold leading-tight", children: formatDate(ad.created_at) }) ] }),
-      ] }),
-      a("div", { className: "mt-3 flex items-center gap-2", children: p("span", { className: "flex items-center gap-1.5 rounded-full bg-[var(--gold-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--gold)]", children: [a(Icon, { name: "clock", size: 13 }), " ", ad.status] }) }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Связаться" }),
-      p("div", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-        p("a", { href: waHref(ad.whatsapp), target: "_blank", rel: "noopener", className: "flex items-center justify-center gap-2 rounded-[12px] bg-[var(--green)] py-3.5 text-[14px] font-bold text-black", children: [a(Icon, { name: "messageCircle", size: 17 }), " WhatsApp"] }),
-        p("a", { href: telHref(ad.phone), className: "flex items-center justify-center gap-2 rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black", children: [a(Icon, { name: "phone", size: 17 }), " Позвонить"] }),
-      ] }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Описание" }),
-      a("p", { className: "mt-3 whitespace-pre-wrap text-[14px] leading-relaxed text-[var(--text)]", children: ad.description }),
-    ] }),
-    ad.isOwn && p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Действия" }),
-      p("div", { className: "mt-3 flex flex-col gap-2", children: [
-        p("button", { onClick: () => onEdit(ad), className: "flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--surface-2)] py-3.5 text-[14px] font-semibold", children: [a(Icon, { name: "pencil", size: 16 }), " Редактировать"] }),
-        !confirmDelete ? p("button", { onClick: () => setConfirmDelete(true), className: "flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--surface-2)] py-3.5 text-[14px] font-semibold text-[var(--red)]", children: [a(Icon, { name: "trash2", size: 16 }), " Удалить"] }) : p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [
-          a("p", { className: "text-[13px] font-semibold text-[var(--red)]", children: "Удалить безвозвратно?" }),
-          p("div", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-            a("button", { onClick: () => onDelete(ad.id), className: "rounded-[10px] bg-[var(--red)] py-2.5 text-[13px] font-bold text-black", children: "Удалить" }),
-            a("button", { onClick: () => setConfirmDelete(false), className: "rounded-[10px] bg-[var(--surface)] py-2.5 text-[13px] font-semibold", children: "Отмена" }),
-          ] }),
-        ] }),
-      ] }),
-    ] }),
-  ] });
-}
-
-function MarketScreen({ notify, user }) {
-  const [ads, setAds] = T.useState([]);
-  const [loading, setLoading] = T.useState(true);
-  const [view, setView] = T.useState("list");
-  const [activeId, setActiveId] = T.useState(null);
-  const [editing, setEditing] = T.useState(null);
-
-  const loadAds = async () => {
-    const { data } = await supabase.from("orders")
-      .select("*")
-      .eq("service_id", "market")
-      .order("created_at", { ascending: false });
-
-    if (data) {
-      setAds(data.map((o) => {
-        const parts = (o.address || "").split(" | ");
-        return {
-          id: o.id,
-          title: parts[0] || "Без названия",
-          city: parts[1] || "",
-          description: parts[2] || "",
-          price: parts[3] || "",
-          category: o.variant_id,
-          phone: o.client_phone,
-          whatsapp: o.client_phone,
-          status: "Активно",
-          created_at: o.created_at,
-          negotiable: parts[3] === "Договорная",
-          isOwn: normalizePhone(o.client_phone) === normalizePhone(user.phone),
-        };
-      }));
-    }
-    setLoading(false);
-  };
-
-  T.useEffect(() => { loadAds(); }, []);
-
-  const active = ads.find((x) => x.id === activeId);
-
-  const removeAd = async (id) => {
-    const { error } = await supabase.from("orders").delete().eq("id", id);
-    if (!error) {
-      setAds((prev) => prev.filter((x) => x.id !== id));
-      setView("list");
-      notify("Объявление удалено");
-    } else {
-      notify("Ошибка удаления: " + error.message);
-    }
-  };
-
-  if (view === "form") {
-    return a(MarketForm, { initial: editing, user, onCancel: () => { setView("list"); setEditing(null); }, onSave: () => { loadAds(); setView("list"); setEditing(null); }, notify });
-  }
-
-  if (view === "details" && active) {
-    return a(MarketDetails, { ad: active, onBack: () => setView("list"), onEdit: (ad) => { setEditing(ad); setView("form"); }, onDelete: removeAd });
-  }
-
-  if (loading) return a("div", { className: "mt-10 flex justify-center", children: a("div", { className: "loader" }) });
-
-  return a(MarketList, { ads, onOpen: (ad) => { setActiveId(ad.id); setView("details"); }, onAdd: () => { setEditing(null); setView("form"); } });
-}
-
-/* ============================ APP ============================ */
-function App() {
-  const { user, register, logout } = useAuth();
-  const [tab, setTab] = T.useState("home");
-  const [toast, setToast] = T.useState("");
-
-  const notify = (msg) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
-  const labels = {
-    home: "Главная · Радар",
-    taxi: "Такси",
-    workers: "Рабочие",
-    market: "Маркет",
-    chertezhnik: "Чертёжник",
-  };
-
-  if (!user) {
-    return a("div", {
-      className: "min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]",
-      style: { paddingTop: "var(--safe-area-inset-top)", boxSizing: "border-box" },
-      children: p("div", { className: "mx-auto flex min-h-[calc(100dvh-var(--safe-area-inset-top))] w-full max-w-[560px] flex-col px-4 pb-6", children: [
-        a(Header, { label: "Регистрация", onBell: () => {}, user: null, onLogout: () => {} }),
-        a(Toast, { text: toast, onClose: () => setToast("") }),
-        a(AuthScreen, { onRegister: (data) => { register(data); notify("Добро пожаловать, " + (data.name || data.phone) + "!"); } }),
-      ] }),
-    });
-  }
-
-  return a("div", {
-    className: "min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]",
-    style: { paddingTop: "var(--safe-area-inset-top)", boxSizing: "border-box" },
-    children: p("div", { className: "mx-auto flex min-h-[calc(100dvh-var(--safe-area-inset-top))] w-full max-w-[560px] flex-col px-4 pb-24", children: [
-      a(Header, { label: labels[tab], onBell: () => notify("Уведомления появятся позже"), user, onLogout: () => { logout(); notify("Вы вышли из аккаунта"); } }),
-      a(Toast, { text: toast, onClose: () => setToast("") }),
-      a("main", { className: "flex min-w-0 flex-1 flex-col", children: [
-        a("div", { role: "tabpanel", className: tab === "home" ? "flex flex-1 flex-col" : "hidden", children: a(HomeScreen, { notify, user, setTab }) }),
-        a("div", { role: "tabpanel", className: tab === "taxi" ? "flex flex-1 flex-col" : "hidden", children: a(TaxiScreen, { notify, user }) }),
-        a("div", { role: "tabpanel", className: tab === "workers" ? "flex flex-1 flex-col" : "hidden", children: a(WorkersScreen, { notify, user }) }),
-        a("div", { role: "tabpanel", className: tab === "market" ? "flex flex-1 flex-col" : "hidden", children: a(MarketScreen, { notify, user }) }),
-        a("div", { role: "tabpanel", className: tab === "chertezhnik" ? "flex flex-1 flex-col" : "hidden", children: a(ChertezhnikScreen, { notify, user }) }),
-      ] }),
-      a(BottomNav, { tab, setTab }),
-    ] }),
-  });
-}
-
-createRoot(document.getElementById("root")).render(a(React.StrictMode, { children: a(App, {}) }));
-</script>
-</body>
-</html>
+              a("label", { htmlFor: "chPointA", className: "text-[12px] text-[var(--muted)]", children: "
