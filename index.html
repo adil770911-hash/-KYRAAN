@@ -959,6 +959,28 @@ function HomeScreen({ notify, user, setTab }) {
     ] });
   }
 
+  /* Когда открыто окно оформления заказа — оставляем заказчика только на окне заказа */
+  if (form) {
+    return p("div", {
+      className: "flex flex-1 flex-col pb-2",
+      children: [
+        p("div", {
+          className: "mt-1 flex items-center justify-between gap-3",
+          children: [
+            a("h1", { className: "text-[20px] font-extrabold leading-tight text-white", children: "Оформление заказа" }),
+            a("button", {
+              type: "button",
+              onClick: closeForm,
+              className: "rounded-full bg-[var(--surface)] px-3 py-1.5 text-[12px] font-semibold text-[var(--muted)]",
+              children: "← К списку услуг",
+            }),
+          ],
+        }),
+        formBlock,
+      ],
+    });
+  }
+
   return p("div", { className: "flex flex-1 flex-col pb-2", children: [
     p("div", { className: "mt-1 flex items-start justify-between gap-3", children: [
       p("div", { children: [
@@ -991,7 +1013,6 @@ function HomeScreen({ notify, user, setTab }) {
           a("button", { type: "button", onClick: (e) => { e.preventDefault(); e.stopPropagation(); setOpenId(isOpen ? null : svc.id); }, "aria-label": isOpen ? "Свернуть" : "Развернуть", className: "flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]", children: a(Icon, { name: "chevronDown", size: 18, className: isOpen ? "rotate-180 transition" : "" }) }),
         ] }),
         isOpen && a("div", { className: "mt-4 flex flex-col gap-2", children: svc.subs.map((sub) => a("button", { type: "button", onClick: (e) => { e.preventDefault(); e.stopPropagation(); openForm(svc, sub); }, className: "w-full rounded-[12px] bg-[var(--surface-2)] px-4 py-3 text-left text-[14px] font-semibold text-white", children: sub }, sub)) }),
-        form?.service.id === svc.id && formBlock,
       ] }, svc.id);
     }) }),
     p("div", { className: "mt-6 flex items-center justify-between", children: [
@@ -1007,7 +1028,6 @@ function HomeScreen({ notify, user, setTab }) {
         ] }),
         a(Icon, { name: "chevronRight", size: 18, className: "text-[var(--muted)]" }),
       ] }),
-      form?.service.id === svc.id && formBlock,
     ] }, svc.id)) }),
   ] });
 }
