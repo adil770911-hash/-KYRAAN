@@ -126,13 +126,11 @@ const PHONE_PLACEHOLDER = "+996 704 644 876";
 const STORAGE_KEY = "kyraan_user_v1";
 
 /* ============================ BISHKEK & CHUY ZONE ============================ */
-// Только Бишкек и Чуйская область
 const DEFAULT_CENTER = [42.8746, 74.5698];
 const CHUY_BOUNDS = L.latLngBounds(
-  [42.35, 73.45], // юго-запад Чуйской области
-  [43.35, 75.85]  // северо-восток Чуйской области
+  [42.35, 73.45],
+  [43.35, 75.85]
 );
-const CHUY_VIEWBOX = "73.45,43.35,75.85,42.35";
 
 function isInsideChuy(pt) {
   if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return false;
@@ -141,7 +139,6 @@ function isInsideChuy(pt) {
 /* ======================================================================== */
 
 /* ============================ TAXI TARIFF MODEL ============================ */
-// Единый тариф Эконом: цена = −20% от Яндекса, водитель забирает 100%, KYRAAN — 0
 const YANDEX_BASE = {
   "Эконом": { boarding: 50, perKm: 30, minimum: 150 },
 };
@@ -199,35 +196,6 @@ async function reverseGeocodeLabel(lat, lng) {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
-async function forwardGeocodeAddress(queryText) {
-  const raw = String(queryText || "").trim();
-  if (raw.length < 3) return null;
-
-  const coordMatch = raw.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
-  if (coordMatch) {
-    const pt = { lat: Number(coordMatch[1]), lng: Number(coordMatch[2]) };
-    return isInsideChuy(pt) ? pt : null;
-  }
-
-  const hasChuy = /бишкек|чуй|токмок|кант|лебединовк|аламедин|сокулук|беловодск|кара-балта|кемин|ивановк|новопокровк|маевк|пригородн/i.test(raw);
-  const searchQuery = hasChuy ? raw : `${raw}, Бишкек`;
-
-  try {
-    // Строго внутри Бишкека и Чуйской области
-    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&accept-language=ru&viewbox=${CHUY_VIEWBOX}&bounded=1&q=${encodeURIComponent(searchQuery)}`;
-    const res = await fetch(url, { headers: { "Accept": "application/json" } });
-    if (!res.ok) return null;
-    const list = await res.json();
-    if (Array.isArray(list)) {
-      for (const item of list) {
-        const pt = { lat: Number(item.lat), lng: Number(item.lon) };
-        if (isInsideChuy(pt)) return pt;
-      }
-    }
-  } catch {}
-  return null;
-}
-
 async function fetchOsrmRoute(aPt, bPt) {
   const url = `https://router.project-osrm.org/route/v1/driving/${aPt.lng},${aPt.lat};${bPt.lng},${bPt.lat}?overview=full&geometries=geojson`;
   const res = await fetch(url);
@@ -255,10 +223,8 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
   const [routeKm, setRouteKm] = T.useState(null);
   const [locating, setLocating] = T.useState(false);
 
-  const ptARef = T.useRef(ptA);
-  const ptBRef = T.useRef(ptB);
-  ptARef.current = ptA;
-  ptBRef.current = ptB;
+  const pointARef = T.useRef(pointA);
+  pointARef.current = pointA;
 
   const makePinIcon = (bg, label) =>
     L.divIcon({
@@ -268,7 +234,33 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
       html: `<div style="width:28px;height:28px;border-radius:9999px;background:${bg};color:#0A0A0A;font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #0A0A0A;box-shadow:0 2px 8px rgba(0,0,0,.6)">${label}</div>`,
     });
 
-  // Инициализация карты Leaflet строго в границах Бишкека и Чуйской области
+  const applyGeoLocationPointA = (mapInstance) => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if (!isInsideChuy(coords)) {
+          setRoutingState("out");
+          setLocating(false);
+          return;
+        }
+        setPtA(coords);
+        setPtB(null);
+        setRouteKm(null);
+        setRoutingState("idle");
+        onRouteCalculated(null);
+        if (mapInstance) mapInstance.setView([coords.lat, coords.lng], 15);
+        const labelA = await reverseGeocodeLabel(coords.lat, coords.lng);
+        onChangePoints(labelA, "");
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  // Инициализация карты + автоматическая Точка А от текущей геолокации
   T.useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current, {
@@ -293,32 +285,20 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
         setRoutingState("out");
         return;
       }
-      const currentA = ptARef.current;
-      const currentB = ptBRef.current;
-
-      if (!currentA || (currentA && currentB)) {
-        setPtA(clicked);
-        setPtB(null);
-        setRouteKm(null);
-        setRoutingState("idle");
-        onRouteCalculated(null);
-        const labelA = await reverseGeocodeLabel(clicked.lat, clicked.lng);
-        onChangePoints(labelA, "");
-      } else {
-        setPtB(clicked);
-        const labelB = await reverseGeocodeLabel(clicked.lat, clicked.lng);
-        onChangePoints(pointA, labelB);
-      }
+      setPtB(clicked);
+      const labelB = await reverseGeocodeLabel(clicked.lat, clicked.lng);
+      onChangePoints(pointARef.current, labelB);
     });
 
     mapRef.current = map;
+    applyGeoLocationPointA(map);
+
     return () => {
       map.remove();
       mapRef.current = null;
     };
   }, []);
 
-  // Пересчёт размера Leaflet при разворачивании/сворачивании карты
   T.useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -328,43 +308,7 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
     return () => clearTimeout(timer);
   }, [expanded]);
 
-  // Автоматический поиск Точки А по тексту (только Бишкек и Чуйская область)
-  T.useEffect(() => {
-    const q = (pointA || "").trim();
-    if (q.length < 3) return;
-    const timer = setTimeout(async () => {
-      const found = await forwardGeocodeAddress(q);
-      if (found) {
-        setPtA((prev) => {
-          if (prev && Math.abs(prev.lat - found.lat) < 0.0001 && Math.abs(prev.lng - found.lng) < 0.0001) {
-            return prev;
-          }
-          return found;
-        });
-      }
-    }, 650);
-    return () => clearTimeout(timer);
-  }, [pointA]);
-
-  // Автоматический поиск Точки Б по тексту (только Бишкек и Чуйская область)
-  T.useEffect(() => {
-    const q = (pointB || "").trim();
-    if (q.length < 3) return;
-    const timer = setTimeout(async () => {
-      const found = await forwardGeocodeAddress(q);
-      if (found) {
-        setPtB((prev) => {
-          if (prev && Math.abs(prev.lat - found.lat) < 0.0001 && Math.abs(prev.lng - found.lng) < 0.0001) {
-            return prev;
-          }
-          return found;
-        });
-      }
-    }, 650);
-    return () => clearTimeout(timer);
-  }, [pointB]);
-
-  // Обновление маркеров и линии маршрута
+  // Обновление маркеров и линии маршрута (Точка А = геолокация, Точка Б = указанное место)
   T.useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -409,54 +353,26 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
     }
   }, [ptA, ptB]);
 
-  const useMyLocation = () => {
-    setExpanded(true);
-    if (!navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if (!isInsideChuy(coords)) {
-          setRoutingState("out");
-          setLocating(false);
-          return;
-        }
-        setPtA(coords);
-        setPtB(null);
-        setRouteKm(null);
-        setRoutingState("idle");
-        onRouteCalculated(null);
-        if (mapRef.current) mapRef.current.setView([coords.lat, coords.lng], 15);
-        const labelA = await reverseGeocodeLabel(coords.lat, coords.lng);
-        onChangePoints(labelA, "");
-        setLocating(false);
-      },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  };
-
-  const clearPoints = () => {
-    setPtA(null);
+  const clearPointB = () => {
     setPtB(null);
     setRouteKm(null);
     setRoutingState("idle");
     onRouteCalculated(null);
-    onChangePoints("", "");
-    if (mapRef.current) mapRef.current.setView(DEFAULT_CENTER, 13);
+    onChangePoints(pointARef.current, "");
+    if (ptA && mapRef.current) mapRef.current.setView([ptA.lat, ptA.lng], 14);
   };
 
   const hintText = routingState === "out"
     ? "Доступны только Бишкек и Чуйская область."
-    : !ptA
-      ? "Карта Бишкека и Чуйской области. Нажмите на карту или впишите адрес."
-      : !ptB
-        ? "Укажите Точку Б на карте или впишите адрес — маршрут построится сам."
-        : routingState === "loading"
-          ? "Строим маршрут по дорогам…"
-          : routingState === "fallback"
-            ? `Маршрут построен: ${routeKm} км.`
-            : `Маршрут построен: ${routeKm} км.`;
+    : locating
+      ? "Определяем Точку А по вашей геолокации…"
+      : !ptA
+        ? "Нажмите «Моё местоположение», чтобы задать Точку А."
+        : !ptB
+          ? "Точка А задана по геолокации. Нажмите на карту, чтобы указать Точку Б."
+          : routingState === "loading"
+            ? "Строим маршрут по дорогам…"
+            : `Маршрут от текущей геолокации: ${routeKm} км.`;
 
   return p("div", {
     className: "mt-3 rounded-[14px] bg-[var(--surface-2)] p-3",
@@ -465,7 +381,7 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
       p("div", {
         className: "mb-2 flex flex-wrap items-center justify-between gap-2",
         children: [
-          a("span", { className: "text-[12px] font-bold text-white", children: "Бишкек и Чуйская область" }),
+          a("span", { className: "text-[12px] font-bold text-white", children: "А — геолокация · Б — на карте" }),
           p("div", {
             className: "flex flex-wrap items-center gap-1.5",
             children: [
@@ -477,16 +393,16 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
               }),
               a("button", {
                 type: "button",
-                onClick: (e) => { e.stopPropagation(); useMyLocation(); },
+                onClick: (e) => { e.stopPropagation(); setExpanded(true); applyGeoLocationPointA(mapRef.current); },
                 disabled: locating,
                 className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--gold)] disabled:opacity-40",
-                children: locating ? "GPS…" : "Моё местоположение",
+                children: locating ? "GPS…" : "Обновить А",
               }),
-              (ptA || ptB) && a("button", {
+              ptB && a("button", {
                 type: "button",
-                onClick: (e) => { e.stopPropagation(); clearPoints(); },
+                onClick: (e) => { e.stopPropagation(); clearPointB(); },
                 className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]",
-                children: "Очистить",
+                children: "Сбросить Б",
               }),
             ],
           }),
@@ -495,7 +411,7 @@ function MapRoutePicker({ pointA, pointB, onChangePoints, onRouteCalculated }) {
       a("div", {
         ref: mapContainerRef,
         className: `kyraan-map ${expanded ? "kyraan-map-expanded" : ""}`,
-        "aria-label": "Карта Бишкека и Чуйской области",
+        "aria-label": "Карта выбора Точки Б",
       }),
       a("p", {
         className: "mt-2 text-[11px] leading-snug text-[var(--muted)]",
@@ -598,7 +514,6 @@ const CATEGORIES = [
 ];
 const categoryById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[0];
 
-// Единый тариф Эконом для Бишкек Такси
 const TRANSPORT = [
   { id: "city_taxi", title: "Бишкек Такси", icon: "car", subs: ["Эконом"] },
   { id: "evacuator", title: "Эвакуатор", icon: "car", subs: ["Sprinter", "Sprinter+прицеп", "Atego", "Atego+прицеп"] },
@@ -835,7 +750,7 @@ function HomeScreen({ notify, user }) {
       return;
     }
     if (isCityTaxi && !routeKm) {
-      setError("Укажите Точку А и Точку Б в пределах Бишкека и Чуйской области.");
+      setError("Укажите Точку Б на карте.");
       return;
     }
 
@@ -863,6 +778,7 @@ function HomeScreen({ notify, user }) {
         direct_settlement: true,
         kyraan_fee: 0,
         map_provider: "openstreetmap+osrm",
+        point_a_source: "geolocation",
         region: "bishkek_chuy",
       };
     }
@@ -948,12 +864,12 @@ function HomeScreen({ notify, user }) {
       }),
       a("p", {
         className: "mt-2 text-center text-[11px] leading-snug text-[var(--muted)]",
-        children: "Бишкек и Чуйская область. Водитель получает 100%, KYRAAN — 0. Оплата напрямую водителю.",
+        children: "Точка А — ваша геолокация, Точка Б — на карте. Оплата напрямую водителю, комиссия 0 сом.",
       }),
     ] : [
       a("p", {
         className: "text-center text-[12px] leading-relaxed text-[var(--muted)]",
-        children: "Укажите Точку А и Точку Б в пределах Бишкека и Чуйской области — километраж и цена посчитаются автоматически.",
+        children: "Точка А берётся от вашей текущей геолокации. Нажмите на карту, чтобы указать Точку Б.",
       }),
     ],
   });
@@ -969,7 +885,7 @@ function HomeScreen({ notify, user }) {
       a("p", {
         className: "mt-1 text-[13px] leading-relaxed text-[var(--muted)]",
         children: isCityTaxi
-          ? "Тариф Эконом · −20% от Яндекса · Бишкек и Чуйская область · комиссия KYRAAN — 0 сом."
+          ? "Точка А — ваша геолокация · Точка Б — на карте · −20% от Яндекса · 0 сом комиссия."
           : "Заявка будет создана от вашего номера.",
       }),
       p("div", {
@@ -992,12 +908,12 @@ function HomeScreen({ notify, user }) {
         className: "mt-3 flex flex-col gap-3",
         children: [
           p("div", { children: [
-            a("label", { className: "text-[12px] text-[var(--muted)]", children: isCityTaxi ? "Точка А (откуда)" : "Точка А (по желанию)" }),
-            a("input", { value: pointA, onChange: (e) => setPointA(e.target.value.slice(0, 80)), placeholder: "Например: Бобулова, 69а", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
+            a("label", { className: "text-[12px] text-[var(--muted)]", children: isCityTaxi ? "Точка А (текущая геолокация)" : "Точка А (по желанию)" }),
+            a("input", { value: pointA, onChange: (e) => setPointA(e.target.value.slice(0, 80)), placeholder: "Определяется по GPS…", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
           ] }),
           p("div", { children: [
             a("label", { className: "text-[12px] text-[var(--muted)]", children: isCityTaxi ? "Точка Б (куда)" : "Точка Б (по желанию)" }),
-            a("input", { value: pointB, onChange: (e) => setPointB(e.target.value.slice(0, 80)), placeholder: "Например: Советская / Киевская", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
+            a("input", { value: pointB, onChange: (e) => setPointB(e.target.value.slice(0, 80)), placeholder: "Нажмите на карту или впишите ориентир", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
           ] }),
         ],
       }),
@@ -1049,7 +965,7 @@ function HomeScreen({ notify, user }) {
       a("h2", { className: "text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]", children: "HUNTER 01 · Транспорт" }),
       a("span", { className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]", children: [TRANSPORT.length, " услуги"] }),
     ] }),
-    a("p", { className: "mt-2 rounded-[12px] bg-[var(--gold-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--gold)]", children: "Такси — Эконом (−20% от Яндекса, Бишкек и Чуйская область, оплата напрямую водителю)" }),
+    a("p", { className: "mt-2 rounded-[12px] bg-[var(--gold-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--gold)]", children: "Такси — Эконом (−20% от Яндекса, Точка А по геолокации, Точка Б на карте)" }),
     a("div", { className: "mt-3 flex flex-col gap-3", children: TRANSPORT.map((svc) => {
       const isOpen = openId === svc.id;
       return p("section", { ref: (el) => { nodeRefs.current[svc.id] = el; }, className: "rounded-[16px] bg-[#1E1E1E] p-4", children: [
