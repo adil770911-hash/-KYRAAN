@@ -1,1295 +1,1113 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0A0A0A" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0A0A">
 <title>KYRAAN — Заказчикам</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <style>
-  :root{
-    --bg:#0A0A0A; --surface:#1E1E1E; --surface-2:#2A2A2A;
-    --text:#F5F3EF; --muted:#9B9B9B; --muted-2:#6E6E6E;
-    --gold:#E8B84B; --gold-soft:#2A2415;
-    --green:#2BD46B; --green-soft:#15281D;
-    --red:#FF6B6B;
-    --safe-area-inset-top: env(safe-area-inset-top, 0px);
-  }
-  *,*::before,*::after{ box-sizing:border-box }
-  html,body{ margin:0; background:var(--bg); color:var(--text);
-    font-family:-apple-system,"Segoe UI",system-ui,sans-serif;
-    -webkit-text-size-adjust:100%; }
-  button{ font:inherit; cursor:pointer; background:none; border:0; color:inherit }
-  input,textarea,select{ font:inherit }
-  input:focus,textarea:focus{ outline:2px solid rgba(232,184,75,.55); outline-offset:0 }
-
-  @keyframes radar-sweep{ from{transform:rotate(0)} to{transform:rotate(360deg)} }
-  @keyframes radar-pulse{ 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.65);opacity:.45} }
-  @keyframes radar-blip{ 0%,100%{opacity:.35;transform:scale(.85)} 50%{opacity:1;transform:scale(1.15)} }
-
-  .radar-card{
-    background:radial-gradient(circle at 50% 18%,rgba(43,212,107,.22),rgba(2,18,10,.98) 58%),#02100a;
-    border:2px solid rgba(43,212,107,.72);
-    box-shadow:0 0 0 1px rgba(43,212,107,.18),0 0 34px rgba(43,212,107,.32),inset 0 0 30px rgba(43,212,107,.14);
-  }
-  .radar-scope{
-    background:radial-gradient(circle,rgba(43,212,107,.18) 0%,rgba(0,28,14,.95) 62%,#010805 100%);
-    border:2px solid #2bd46b;
-    box-shadow:0 0 28px rgba(43,212,107,.48),inset 0 0 22px rgba(43,212,107,.22);
-  }
-  .radar-ring{ border:1.5px solid rgba(43,212,107,.52) }
-  .radar-ring-2{ border:1.5px solid rgba(43,212,107,.34) }
-  .radar-ring-3{ border:1px solid rgba(43,212,107,.22) }
-  .radar-sweep{
-    background:conic-gradient(from 0deg,rgba(43,212,107,.88) 0deg,rgba(43,212,107,.28) 58deg,transparent 78deg);
-    animation:radar-sweep 3.2s linear infinite;
-  }
-  .radar-center{ animation:radar-pulse 1.8s ease-in-out infinite }
-  .radar-blip{ animation:radar-blip 1.8s ease-in-out infinite }
-  @media (prefers-reduced-motion: reduce){ .radar-sweep,.radar-center,.radar-blip{ animation:none } }
-
-  .clamp-2{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .no-scrollbar::-webkit-scrollbar{ display:none }
-  .no-scrollbar{ scrollbar-width:none }
-
-  .loader { border: 3px solid var(--surface-2); border-top: 3px solid var(--gold); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 0 auto; }
-  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-  .leaflet-container { background:#1a1a1a; border-radius:14px; }
-  .leaflet-tile { filter: brightness(0.85) contrast(1.05) hue-rotate(-5deg); }
-  .map-picker-box { position:fixed; inset:0; z-index:9999; background:#000; display:flex; flex-direction:column; }
-  .map-picker-box .leaflet-container { flex:1; border-radius:0; }
-
-  @keyframes pulse-soft { 0%,100%{opacity:1} 50%{opacity:.6} }
-  .pulse-soft { animation:pulse-soft 1.6s ease-in-out infinite; }
+:root{
+  --bg:#0A0A0A;--surface:#1E1E1E;--surface-2:#2A2A2A;
+  --text:#F5F3EF;--muted:#9B9B9B;
+  --gold:#E8B84B;--gold-soft:#2A2415;
+  --green:#2BD46B;--green-soft:#15281D;--red:#FF6B6B;
+  --safe-area-inset-top:env(safe-area-inset-top,0px);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
+input,textarea,select{font:inherit}
+input:focus,textarea:focus{outline:2px solid rgba(232,184,75,.55)}
+.loader{border:3px solid var(--surface-2);border-top:3px solid var(--gold);border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;margin:0 auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes radar-sweep{to{transform:rotate(360deg)}}
+@keyframes radar-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.65);opacity:.45}}
+@keyframes radar-blip{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes pulse-soft{0%,100%{opacity:1}50%{opacity:.6}}
+.radar-card{background:radial-gradient(circle at 50% 18%,rgba(43,212,107,.22),rgba(2,18,10,.98) 58%),#02100a;border:2px solid rgba(43,212,107,.72);box-shadow:0 0 34px rgba(43,212,107,.32)}
+.radar-scope{background:radial-gradient(circle,rgba(43,212,107,.18) 0%,rgba(0,28,14,.95) 62%,#010805 100%);border:2px solid #2bd46b;box-shadow:0 0 28px rgba(43,212,107,.48)}
+.radar-ring{border:1.5px solid rgba(43,212,107,.52)}
+.radar-ring-2{border:1.5px solid rgba(43,212,107,.34)}
+.radar-ring-3{border:1px solid rgba(43,212,107,.22)}
+.radar-sweep{background:conic-gradient(from 0deg,rgba(43,212,107,.88) 0deg,rgba(43,212,107,.28) 58deg,transparent 78deg);animation:radar-sweep 3.2s linear infinite}
+.radar-center{animation:radar-pulse 1.8s ease-in-out infinite}
+.radar-blip{animation:radar-blip 1.8s ease-in-out infinite}
+.pulse-soft{animation:pulse-soft 1.6s ease-in-out infinite}
+.clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.no-scrollbar::-webkit-scrollbar{display:none}
+.no-scrollbar{scrollbar-width:none}
+.map-picker-box{position:fixed;inset:0;z-index:9999;background:#000;display:flex;flex-direction:column}
+.map-picker-box .leaflet-container{flex:1;border-radius:0}
+#boot-loader{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center}
 </style>
 </head>
 <body>
-<div id="root"></div>
 
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
-  }
+<div id="root">
+  <div id="boot-loader">
+    <div>
+      <div style="font-size:36px;font-weight:900;color:#E8B84B;margin-bottom:14px">K</div>
+      <div id="boot-msg" style="font-size:14px;color:#9B9B9B">Загрузка...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showBootError(msg){
+  var el=document.getElementById('boot-msg');
+  if(el) el.innerHTML='⚠️ '+msg+'<br><br><button onclick="location.reload()" style="padding:12px 24px;background:#E8B84B;color:#000;border:0;border-radius:10px;font-weight:bold;font-size:14px">Обновить</button>';
 }
-</script>
-
-<script type="module">
-import React from "react";
-import { createRoot } from "react-dom/client";
-import { createClient } from "@supabase/supabase-js";
-
-/* ============================ SUPABASE CONFIG ============================ */
-const SUPABASE_URL = "https://eevkhnenjrskpupvtkgi.supabase.co";
-const SUPABASE_KEY = "sb_publishable_6tNocMb7Mv9HqcjVaKxDDQ_PfK1DkXe";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-/* ======================================================================== */
-
-const a = (type, props, key) =>
-  React.createElement(type, key === undefined || key === null ? props : { ...props, key });
-const p = a;
-const T = React;
-const Fragment = React.Fragment;
-
-const ADMIN_PHONE = "+996 704 448 998";
-const PHONE_HINT = "Обязательно +996 и 9 цифр";
-const PHONE_PLACEHOLDER = "+996 704 644 876";
-const STORAGE_KEY = "kyraan_user_v1";
-
-/* ============================ ЕДИНЫЙ КОНТРАКТ ============================ */
-/* Эти же константы скопируй в кабинет исполнителя и админку */
-const SERVICES = {
-  city_taxi:   { label: "Бишкек Такси",       hunter: "HUNTER_01", icon: "car" },
-  evacuator:   { label: "Эвакуатор",           hunter: "HUNTER_01", icon: "car" },
-  manipulator: { label: "Манипулятор",         hunter: "HUNTER_01", icon: "package" },
-  cargo:       { label: "Грузоперевозки",      hunter: "HUNTER_01", icon: "truck" },
-  plumber:     { label: "Сантехник",           hunter: "HUNTER_02", icon: "droplets" },
-  electrician: { label: "Электрик",            hunter: "HUNTER_02", icon: "zap" },
-  cleaning:    { label: "Клининг",             hunter: "HUNTER_02", icon: "sparkles" },
-  welder:      { label: "Сварщик",             hunter: "HUNTER_02", icon: "wrench" },
-  fridge:      { label: "Ремонт холодильника", hunter: "HUNTER_02", icon: "snowflake" },
-  washer:      { label: "Ремонт стиральной",   hunter: "HUNTER_02", icon: "washingMachine" },
-  tv:          { label: "Телемастер",          hunter: "HUNTER_02", icon: "tv" },
-  hour:        { label: "Мастер на час",       hunter: "HUNTER_02", icon: "hammer" },
-  intercity:   { label: "Межгород такси",      hunter: "BOARD",     icon: "truck" },
-  workers:     { label: "Разнорабочие",        hunter: "BOARD",     icon: "users" },
-  market:      { label: "Маркет",              hunter: "BOARD",     icon: "shoppingBag" },
-};
-
-const TAXI_STAGE_LABEL = {
-  searching: "Ищем водителя",
-  assigned:  "Водитель едет к вам",
-  arrived:   "Водитель на месте",
-  riding:    "В пути",
-  done:      "Завершено",
-  cancelled: "Отменено",
-};
-
-const TAXI_TARIFFS = {
-  econom:    { label: "Эконом",    emoji: "🚕", base: 60, perKm: 15, min: 120, color: "#2BD46B" },
-  comfort:   { label: "Комфорт",   emoji: "🚙", base: 80, perKm: 22, min: 180, color: "#E8B84B" },
-  universal: { label: "Универсал", emoji: "🚐", base: 70, perKm: 20, min: 160, color: "#4A9EFF" },
-  minivan:   { label: "Минивэн",   emoji: "🚌", base: 90, perKm: 25, min: 200, color: "#A78BFA" },
-};
-
-function calcTaxiPrice(distanceKm, tariffId) {
-  const t = TAXI_TARIFFS[tariffId] || TAXI_TARIFFS.econom;
-  const raw = t.base + (Number(distanceKm) || 0) * t.perKm;
-  return Math.max(t.min, Math.round(raw / 10) * 10);
+window.addEventListener('error',function(e){showBootError(e.message||'Ошибка сети');});
+window.addEventListener('unhandledrejection',function(e){showBootError((e.reason&&e.reason.message)||'Ошибка');});
+setTimeout(function(){
+  var el=document.getElementById('boot-msg');
+  if(el&&el.textContent==='Загрузка...') showBootError('Долго грузится. Проверьте интернет.');
+},9000);
+if(!window.React||!window.ReactDOM||!window.supabase){
+  showBootError('Не загрузились библиотеки. Проверьте интернет.');
+}else{
+  startApp();
 }
+function startApp(){
+  var React=window.React, ReactDOM=window.ReactDOM;
+  var createRoot=ReactDOM.createRoot;
+  var createClient=window.supabase.createClient;
+  var T=React;
+  function a(type,props,key){return React.createElement(type,key==null?props:Object.assign({},props,{key:key}));}
+  var p=a;
+  var Fragment=React.Fragment;
 
-async function calcRouteDistance(lat1, lng1, lat2, lng2) {
-  try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=false`;
-    const r = await fetch(url);
-    const j = await r.json();
-    if (j.code !== "Ok" || !j.routes?.[0]) return null;
-    return {
-      km: Math.round((j.routes[0].distance / 1000) * 10) / 10,
-      minutes: Math.round(j.routes[0].duration / 60),
-    };
-  } catch { return null; }
-}
+  /* ===================== SUPABASE ===================== */
+  var supabase=createClient(
+    'https://eevkhnenjrskpupvtkgi.supabase.co',
+    'sb_publishable_6tNocMb7Mv9HqcjVaKxDDQ_PfK1DkXe'
+  );
 
-async function reverseGeocode(lat, lng) {
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=ru`
-    );
-    const j = await r.json();
-    return j.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  } catch {
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }
-}
+  /* ===================== CONSTANTS ===================== */
+  var STORAGE_KEY='kyraan_user_v1';
+  var PHONE_HINT='+996 и 9 цифр';
 
-const ADDRESS_SEP = " → ";
-function joinAddress(pointA, pointB) {
-  const A = (pointA || "").trim();
-  const B = (pointB || "").trim();
-  if (!A && !B) return "Уточнить у клиента";
-  if (!B) return A;
-  return A + ADDRESS_SEP + B;
-}
-function splitAddress(addr) {
-  const s = String(addr || "");
-  const i = s.indexOf(ADDRESS_SEP);
-  if (i < 0) return { pointA: s.trim(), pointB: "" };
-  return { pointA: s.slice(0, i).trim(), pointB: s.slice(i + ADDRESS_SEP.length).trim() };
-}
-/* ======================================================================== */
-
-const digits = (v) => String(v || "").replace(/\D/g, "");
-function normalizePhone(v) {
-  if (!v) return "";
-  if (v.startsWith("+996")) return "+996" + digits(v.slice(4)).slice(0, 9);
-  let d = digits(v);
-  if (!d) return "";
-  if (d.startsWith("996")) d = d.slice(3);
-  else if (d.startsWith("0")) d = d.slice(1);
-  return "+996" + d.slice(0, 9);
-}
-const isValidPhone = (v) => /^\+996\d{9}$/.test(v);
-const phoneDigitsCount = (v) => (v && v.startsWith("+996") ? v.length - 4 : 0);
-const telHref = (v) => "tel:" + digits(v);
-const waHref = (v) => "https://wa.me/" + digits(v);
-const cleanPriceForInput = (str) => {
-  if (!str) return "";
-  if (str === "Договорная" || str === "Не указана") return "";
-  const m = String(str).match(/[\d.,]+/);
-  return m ? m[0] : "";
-};
-
-const waLink = (text) => `https://wa.me/996704448998?text=${encodeURIComponent(text)}`;
-const driverRegLink = (route) =>
-  waLink(`Здравствуйте! Хочу зарегистрироваться как водитель Межгород Такси KYRAAN. Маршрут: ${route}`);
-
-const ICONS = {
-  home:'<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-  car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
-  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
-  shoppingBag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
-  bell:'<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
-  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
-  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
-  chevronDown:'<path d="m6 9 6 6 6-6"/>',
-  chevronRight:'<path d="m9 18 6-6-6-6"/>',
-  check:'<path d="M20 6 9 17l-5-5"/>',
-  pencil:'<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
-  trash2:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
-  radar:'<path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/>',
-  phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
-  messageCircle:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
-  mapPin:'<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
-  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
-  arrowRight:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
-  arrowLeft:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
-  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-  globe:'<path d="M21.54 15H17a2 2 0 0 0-2 2v4.54"/><path d="M7 3.34V5a3 3 0 0 0 3 3 2 2 0 0 1 2 2c0 1.1.9 2 2 2a2 2 0 0 0 2-2c0-1.1.9-2 2-2h3.17"/><path d="M11 21.95V18a2 2 0 0 0-2-2 2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05"/><circle cx="12" cy="12" r="10"/>',
-  truck:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
-  package:'<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/><path d="m7.5 4.27 9 5.15"/>',
-  zap:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
-  washingMachine:'<path d="M3 6h3"/><path d="M17 6h.01"/><rect width="18" height="20" x="3" y="2" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M12 18a2.5 2.5 0 0 0 0-5 2.5 2.5 0 0 1 0-5"/>',
-  sparkles:'<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>',
-  droplets:'<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/>',
-  tv:'<rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/>',
-  hammer:'<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>',
-  snowflake:'<path d="m10 20-1.25-2.5L6 18"/><path d="M10 4 8.75 6.5 6 6"/><path d="m14 20 1.25-2.5L18 18"/><path d="m14 4 1.25 2.5L18 6"/><path d="m17 21-3-6h-4"/><path d="m17 3-3 6 1.5 3"/><path d="M2 12h6.5L10 9"/><path d="m20 10-1.5 2 1.5 2"/><path d="M22 12h-6.5L14 15"/><path d="m4 10 1.5 2L4 14"/><path d="m7 21 3-6-1.5-3"/><path d="m7 3 3 6h4"/>',
-  crosshair:'<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>',
-  navigation:'<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
-};
-
-function Icon({ name, size = 20, className = "" }) {
-  return a("svg", {
-    xmlns: "http://www.w3.org/2000/svg", width: size, height: size, viewBox: "0 0 24 24",
-    fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round",
-    className, "aria-hidden": "true", focusable: "false", dangerouslySetInnerHTML: { __html: ICONS[name] || "" },
-  });
-}
-
-const CURRENCIES = [
-  { id: "som", label: "сом", symbol: "сом" },
-  { id: "ruble", label: "рубль", symbol: "₽" },
-  { id: "tenge", label: "тенге", symbol: "₸" },
-  { id: "dollar", label: "доллар", symbol: "$" },
-];
-
-const CATEGORIES = [
-  { id: "intl", short: "Международная", icon: "globe", hint: "Маршруты между странами" },
-  { id: "domestic", short: "Внутренняя", icon: "truck", hint: "По республике и регионам" },
-  { id: "agro", short: "Агропродукция", icon: "package", hint: "Урожай, сырьё, продукция" },
-  { id: "buy", short: "Куплю", icon: "shoppingBag", hint: "Ищу товар или услугу" },
-  { id: "sell", short: "Продам", icon: "shoppingBag", hint: "Предлагаю товар или услугу" },
-];
-const categoryById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[0];
-
-const HUNTER1_SERVICES = ["evacuator", "manipulator", "cargo"];
-const HUNTER2_SERVICES = ["plumber", "electrician", "cleaning", "welder", "fridge", "washer", "tv", "hour"];
-
-const TRANSPORT_SUBS = {
-  evacuator: ["Sprinter", "Sprinter+прицеп", "Atego", "Atego+прицеп"],
-  manipulator: ["3т", "5т", "8т", "10т"],
-  cargo: ["Porter", "Sprinter 1-скат", "1-скатная будка", "1-скатный бортовой", "Sprinter 2-скат", "2-скатная будка", "2-скатный бортовой", "Гигант бортовой", "Гигант будка"],
-};
-
-function formatPrice(ad) {
-  if (ad.negotiable) return "Договорная";
-  if (!ad.price || !String(ad.price).trim()) return "Цена не указана";
-  if (isNaN(String(ad.price).replace(",", ".").trim())) return ad.price;
-  const num = Number(String(ad.price).replace(",", "."));
-  const cur = CURRENCIES.find((c) => c.id === ad.currency);
-  const symbol = cur ? cur.symbol : "сом";
-  return (Number.isFinite(num) ? num.toLocaleString("ru-RU") : ad.price) + " " + symbol;
-}
-const formatDate = (iso) => new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
-const formatTime = (iso) => new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-
-/* ============================ AUTH ============================ */
-function useAuth() {
-  const [user, setUser] = T.useState(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (parsed && isValidPhone(parsed.phone)) return parsed;
-      return null;
-    } catch { return null; }
-  });
-
-  const register = (data) => {
-    const payload = {
-      phone: normalizePhone(data.phone),
-      name: (data.name || "").trim() || normalizePhone(data.phone),
-    };
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
-    setUser(payload);
-
-    supabase.from('orders').insert([{
-      client_phone: payload.phone,
-      service_id: 'registration',
-      hunter: 'CLIENT',
-      status: 'REGISTERED',
-      address: payload.name,
-    }]).then(({ error }) => {
-      if (error) console.error('Reg:', error.message);
-    });
+  var SERVICES={
+    city_taxi:{label:'Бишкек Такси',hunter:'HUNTER_01',icon:'car'},
+    evacuator:{label:'Эвакуатор',hunter:'HUNTER_01',icon:'car'},
+    manipulator:{label:'Манипулятор',hunter:'HUNTER_01',icon:'package'},
+    cargo:{label:'Грузоперевозки',hunter:'HUNTER_01',icon:'truck'},
+    plumber:{label:'Сантехник',hunter:'HUNTER_02',icon:'droplets'},
+    electrician:{label:'Электрик',hunter:'HUNTER_02',icon:'zap'},
+    cleaning:{label:'Клининг',hunter:'HUNTER_02',icon:'sparkles'},
+    welder:{label:'Сварщик',hunter:'HUNTER_02',icon:'wrench'},
+    fridge:{label:'Ремонт холодильника',hunter:'HUNTER_02',icon:'snowflake'},
+    washer:{label:'Ремонт стиральной',hunter:'HUNTER_02',icon:'washingMachine'},
+    tv:{label:'Телемастер',hunter:'HUNTER_02',icon:'tv'},
+    hour:{label:'Мастер на час',hunter:'HUNTER_02',icon:'hammer'}
   };
 
-  const logout = () => {
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
-    setUser(null);
+  var TAXI_STAGE_LABEL={
+    searching:'Ищем водителя',assigned:'Водитель едет к вам',
+    arrived:'Водитель на месте',riding:'В пути',
+    done:'Завершено',cancelled:'Отменено'
   };
 
-  return { user, register, logout };
-}
-
-function AuthScreen({ onRegister }) {
-  const [phone, setPhone] = T.useState("+996");
-  const [name, setName] = T.useState("");
-  const [error, setError] = T.useState("");
-  const phoneOk = isValidPhone(phone);
-
-  const submit = () => {
-    if (!phoneOk) { setError("Введите корректный номер +996 и 9 цифр"); return; }
-    setError("");
-    onRegister({ phone: normalizePhone(phone), name: name.trim() });
+  var TAXI_TARIFFS={
+    econom:{label:'Эконом',emoji:'🚕',base:60,perKm:15,min:120,color:'#2BD46B'},
+    comfort:{label:'Комфорт',emoji:'🚙',base:80,perKm:22,min:180,color:'#E8B84B'},
+    universal:{label:'Универсал',emoji:'🚐',base:70,perKm:20,min:160,color:'#4A9EFF'},
+    minivan:{label:'Минивэн',emoji:'🚌',base:90,perKm:25,min:200,color:'#A78BFA'}
   };
 
-  return p("div", { className: "flex flex-1 flex-col pb-4", children: [
-    p("div", { className: "mt-8 flex flex-col items-center text-center", children: [
-      a("div", { className: "flex h-16 w-16 items-center justify-center rounded-[18px] bg-[var(--gold)] text-[26px] font-black text-black", children: "K" }),
-      a("h1", { className: "mt-5 text-[26px] font-extrabold leading-tight text-white", children: "Добро пожаловать" }),
-      a("p", { className: "mt-2 max-w-[300px] text-[13px] leading-relaxed text-[var(--muted)]", children: "Зарегистрируйтесь по номеру телефона" }),
-    ] }),
-    p("section", { className: "mt-6 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      p("div", { children: [
-        a("label", { className: "text-[12px] text-[var(--muted)]", children: "Телефон * · +996" }),
-        a("input", {
-          type: "tel", inputMode: "tel", maxLength: 20, value: phone, autoFocus: true,
-          onFocus: () => { if (!phone) setPhone("+996"); },
-          onChange: (e) => setPhone(normalizePhone(e.target.value)),
-          placeholder: PHONE_PLACEHOLDER,
-          className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-4 text-[16px] outline-none",
-        }),
-        p("p", { className: "mt-1.5 text-[12px] text-[var(--muted)]", children: [PHONE_HINT, " · ", phoneDigitsCount(phone), " из 9 цифр"] }),
-      ] }),
-      p("div", { className: "mt-3", children: [
-        a("label", { className: "text-[12px] text-[var(--muted)]", children: "Ваше имя (по желанию)" }),
-        a("input", {
-          value: name, onChange: (e) => setName(e.target.value.slice(0, 40)),
-          placeholder: "Например, Азамат",
-          className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-4 text-[16px] outline-none",
-        }),
-      ] }),
-      error && a("p", { className: "mt-3 text-[12px] text-[var(--red)]", role: "alert", children: error }),
-      a("button", { type: "button", onClick: submit, disabled: !phoneOk, className: "mt-4 w-full rounded-[12px] bg-[var(--gold)] py-4 text-[15px] font-bold text-black disabled:opacity-40", children: "Зарегистрироваться" }),
-      a("p", { className: "mt-3 text-center text-[11px] leading-relaxed text-[var(--muted)]", children: "Регистрируясь, вы соглашаетесь с условиями сервиса KYRAAN" }),
-    ] }),
-  ] });
-}
+  var HUNTER1_SERVICES=['evacuator','manipulator','cargo'];
+  var HUNTER2_SERVICES=['plumber','electrician','cleaning','welder','fridge','washer','tv','hour'];
+  var TRANSPORT_SUBS={
+    evacuator:['Sprinter','Sprinter+прицеп','Atego','Atego+прицеп'],
+    manipulator:['3т','5т','8т','10т'],
+    cargo:['Porter','Sprinter 1-скат','1-скатная будка','1-скатный бортовой','Sprinter 2-скат','2-скатная будка','2-скатный бортовой','Гигант бортовой','Гигант будка']
+  };
 
-/* ============================ HEADER / TOAST / NAV ============================ */
-function Header({ label, onBell, user, onLogout }) {
-  return p("header", { className: "flex items-center justify-between py-4", children: [
-    p("div", { className: "flex items-center gap-3", children: [
-      a("div", { className: "flex h-10 w-10 items-center justify-center rounded-[12px] bg-[var(--gold)] text-[16px] font-black tracking-tight text-black", children: "K" }),
-      p("div", { children: [
-        a("p", { className: "text-[18px] font-extrabold leading-none tracking-tight", children: "KYRAAN" }),
-        a("p", { className: "mt-1 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]", children: label }),
-      ] }),
-    ] }),
-    p("div", { className: "flex items-center gap-2", children: [
-      p("button", {
-        type: "button",
-        onClick: (e) => { e.stopPropagation(); onLogout(); },
-        title: "Нажмите, чтобы выйти",
-        className: "flex items-center gap-1.5 rounded-full bg-[var(--surface)] px-3 py-1.5",
-        children: [
-          a(Icon, { name: "phone", size: 12, className: "text-[var(--gold)]" }),
-          a("span", { className: "text-[11px] font-semibold text-[var(--text)]", children: user ? user.phone.slice(-9) : "" }),
-        ],
-      }),
-      a("button", {
-        type: "button",
-        onClick: (e) => { e.preventDefault(); e.stopPropagation(); onBell(); },
-        "aria-label": "Уведомления",
-        className: "flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface)]",
-        children: a(Icon, { name: "bell", size: 17 }),
-      }),
-    ] }),
-  ] });
-}
-
-function Toast({ text, onClose }) {
-  if (!text) return null;
-  return p("div", { className: "mb-3 flex items-start gap-2 rounded-[16px] bg-[var(--surface)] p-4 text-[13px] leading-snug", role: "status", children: [
-    a(Icon, { name: "check", size: 17, className: "mt-0.5 shrink-0 text-[var(--green)]" }),
-    a("span", { children: text }),
-    a("button", { type: "button", onClick: (e) => { e.preventDefault(); e.stopPropagation(); onClose(); }, "aria-label": "Закрыть", className: "ml-auto shrink-0 text-[var(--muted)]", children: a(Icon, { name: "x", size: 16 }) }),
-  ] });
-}
-
-function BottomNav({ tab, setTab }) {
-  const items = [
-    { id: "home", label: "Главная", icon: "home" },
-    { id: "taxi", label: "Такси", icon: "car" },
-    { id: "workers", label: "Рабочие", icon: "users" },
-    { id: "market", label: "Маркет", icon: "shoppingBag" },
+  var CATEGORIES=[
+    {id:'intl',short:'Международная',icon:'globe',hint:'Между странами'},
+    {id:'domestic',short:'Внутренняя',icon:'truck',hint:'По республике'},
+    {id:'agro',short:'Агропродукция',icon:'package',hint:'Урожай, сырьё'},
+    {id:'buy',short:'Куплю',icon:'shoppingBag',hint:'Ищу товар'},
+    {id:'sell',short:'Продам',icon:'shoppingBag',hint:'Предлагаю'}
   ];
-  return a("nav", { className: "sticky bottom-0 mt-4 bg-[var(--bg)] pb-2 pt-2", children: a("div", { className: "flex rounded-[16px] bg-[var(--surface)] p-2", children: items.map((it) => p("button", {
-    type: "button", onClick: (e) => { e.preventDefault(); e.stopPropagation(); setTab(it.id); }, "aria-current": tab === it.id ? "page" : undefined,
-    className: `flex flex-1 flex-col items-center gap-1 rounded-[12px] py-2 text-[11px] font-semibold ${tab === it.id ? "bg-[var(--surface-2)] text-white" : "text-[var(--muted)]"}`,
-    children: [a(Icon, { name: it.icon, size: 20 }), a("span", { children: it.label })],
-  }, it.id)) }) });
-}
+  var CURRENCIES=[
+    {id:'som',label:'сом',symbol:'сом'},
+    {id:'ruble',label:'рубль',symbol:'₽'},
+    {id:'tenge',label:'тенге',symbol:'₸'},
+    {id:'dollar',label:'доллар',symbol:'$'}
+  ];
 
-/* ============================ RADAR (для не-такси заказов) ============================ */
-function RadarCard({ request, onCancel }) {
-  const { pointA, pointB } = splitAddress(request.address || "");
-  return p("div", { className: "radar-card mt-4 overflow-hidden rounded-[24px] p-7 text-center", role: "status", "aria-live": "polite", children: [
-    a("div", { className: "mx-auto flex h-[232px] w-[232px] items-center justify-center", children: p("div", { className: "radar-scope relative h-full w-full overflow-hidden rounded-full", children: [
-      a("span", { className: "radar-ring absolute inset-[18px] rounded-full" }),
-      a("span", { className: "radar-ring-2 absolute inset-[38px] rounded-full" }),
-      a("span", { className: "radar-ring-3 absolute inset-[60px] rounded-full" }),
-      a("span", { className: "absolute left-1/2 top-0 h-full w-px bg-[rgba(43,212,107,.34)]" }),
-      a("span", { className: "absolute left-0 top-1/2 h-px w-full bg-[rgba(43,212,107,.34)]" }),
-      a("span", { className: "radar-sweep absolute inset-0 rounded-full" }),
-      a("span", { className: "radar-blip absolute left-[68%] top-[28%] h-3 w-3 rounded-full bg-[#8affbc] shadow-[0_0_12px_#2bd46b]" }),
-      a("span", { className: "radar-blip absolute left-[26%] top-[62%] h-2.5 w-2.5 rounded-full bg-[#8affbc] shadow-[0_0_10px_#2bd46b]", style: { animationDelay: ".7s" } }),
-      a("span", { className: "radar-center absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#59ff9b] shadow-[0_0_18px_#2bd46b]" }),
-      a("span", { className: "absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" }),
-    ] }) }),
-    p("p", { className: "mt-5 flex items-center justify-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.22em] text-[#8affbc]", children: [a(Icon, { name: "radar", size: 18, className: "shrink-0" }), " Радар активен"] }),
-    a("h3", { className: "mt-4 text-[27px] font-black leading-tight text-[#5dff9b] drop-shadow-[0_0_16px_rgba(43,212,107,.55)]", children: "Заявка отправлена" }),
-    p("div", { className: "mt-5 rounded-[16px] border border-[rgba(43,212,107,.35)] bg-[rgba(1,18,9,.72)] px-5 py-5 text-left", children: [
-      p("p", { className: "text-[18px] font-extrabold leading-snug text-white", children: [request.serviceTitle, request.sub && request.sub !== request.serviceTitle ? " · " + request.sub : ""] }),
-      p("p", { className: "mt-2 text-[16px] font-bold leading-relaxed text-[#b8ffcf]", children: ["Телефон: ", request.phone] }),
-      (pointA || pointB) && p("div", { className: "mt-2 text-[15px] leading-relaxed text-white", children: [
-        pointA && p("p", {}, [a("span", { className: "text-[#8affbc]", children: "Откуда: " }), pointA]),
-        pointB && p("p", { className: "mt-1" }, [a("span", { className: "text-[#8affbc]", children: "Куда: " }), pointB]),
-      ] }),
-    ] }),
-    a("p", { className: "mt-4 text-[16px] font-semibold leading-relaxed text-[#b8ffcf]", children: "Исполнитель перезвонит в течение минуты." }),
-    a("button", { type: "button", onClick: (e) => { e.preventDefault(); e.stopPropagation(); onCancel(); }, className: "mt-5 w-full rounded-[14px] border-2 border-[#2bd46b] bg-transparent py-3.5 text-[15px] font-extrabold text-[#5dff9b]", children: "Отменить заявку" }),
-  ] });
-}
+  /* ===================== HELPERS ===================== */
+  var digits=function(v){return String(v||'').replace(/\D/g,'');};
+  function normalizePhone(v){
+    if(!v)return'';
+    if(v.indexOf('+996')===0)return'+996'+digits(v.slice(4)).slice(0,9);
+    var d=digits(v);
+    if(!d)return'';
+    if(d.indexOf('996')===0)d=d.slice(3);
+    else if(d.charAt(0)==='0')d=d.slice(1);
+    return'+996'+d.slice(0,9);
+  }
+  function isValidPhone(v){return/^\+996\d{9}$/.test(v);}
+  function phoneDigitsCount(v){return v&&v.indexOf('+996')===0?v.length-4:0;}
+  function telHref(v){return'tel:'+digits(v);}
+  function waHref(v){return'https://wa.me/'+digits(v);}
+  function cleanPriceForInput(s){
+    if(!s)return'';
+    if(s==='Договорная'||s==='Не указана')return'';
+    var m=String(s).match(/[\d.,]+/);
+    return m?m[0]:'';
+  }
+  function calcTaxiPrice(km,id){
+    var t=TAXI_TARIFFS[id]||TAXI_TARIFFS.econom;
+    var raw=t.base+(Number(km)||0)*t.perKm;
+    return Math.max(t.min,Math.round(raw/10)*10);
+  }
+  function calcRouteDistance(lat1,lng1,lat2,lng2){
+    var url='https://router.project-osrm.org/route/v1/driving/'+lng1+','+lat1+';'+lng2+','+lat2+'?overview=false';
+    return fetch(url).then(function(r){return r.json();}).then(function(j){
+      if(j.code!=='Ok'||!j.routes||!j.routes[0])return null;
+      return{km:Math.round((j.routes[0].distance/1000)*10)/10,minutes:Math.round(j.routes[0].duration/60)};
+    }).catch(function(){return null;});
+  }
+  function reverseGeocode(lat,lng){
+    return fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&accept-language=ru')
+      .then(function(r){return r.json();})
+      .then(function(j){return j.display_name||(lat.toFixed(5)+', '+lng.toFixed(5));})
+      .catch(function(){return lat.toFixed(5)+', '+lng.toFixed(5);});
+  }
+  var ADDRESS_SEP=' → ';
+  function joinAddress(a1,a2){
+    var A=String(a1||'').trim(), B=String(a2||'').trim();
+    if(!A&&!B)return'Уточнить у клиента';
+    if(!B)return A;
+    return A+ADDRESS_SEP+B;
+  }
+  function splitAddress(addr){
+    var s=String(addr||'');var i=s.indexOf(ADDRESS_SEP);
+    if(i<0)return{pointA:s.trim(),pointB:''};
+    return{pointA:s.slice(0,i).trim(),pointB:s.slice(i+ADDRESS_SEP.length).trim()};
+  }
+  function formatPrice(ad){
+    if(ad.negotiable)return'Договорная';
+    if(!ad.price)return'Цена не указана';
+    var cur=CURRENCIES.filter(function(c){return c.id===ad.currency;})[0];
+    return ad.price+' '+(cur?cur.symbol:'сом');
+  }
+  function formatDate(iso){return new Date(iso).toLocaleDateString('ru-RU',{day:'numeric',month:'long'});}
+  function categoryById(id){return CATEGORIES.filter(function(c){return c.id===id;})[0]||CATEGORIES[0];}
 
-/* ============================ HOME ============================ */
-function HomeScreen({ notify, user, activeTaxiOrder, onOpenTaxi }) {
-  const [openId, setOpenId] = T.useState(null);
-  const [form, setForm] = T.useState(null);
-  const [pointA, setPointA] = T.useState("");
-  const [pointB, setPointB] = T.useState("");
-  const [error, setError] = T.useState("");
-  const [request, setRequest] = T.useState(null);
-  const [sending, setSending] = T.useState(false);
-  const formRef = T.useRef(null);
-
-  const openForm = (serviceId, sub) => {
-    setOpenId(serviceId); setForm({ serviceId, sub });
-    setPointA(""); setPointB(""); setError("");
+  /* ===================== ICONS ===================== */
+  var ICONS={
+    home:'<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+    wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    shoppingBag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+    bell:'<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+    plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+    x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    chevronDown:'<path d="m6 9 6 6 6-6"/>',
+    chevronRight:'<path d="m9 18 6-6-6-6"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
+    pencil:'<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+    trash2:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+    radar:'<path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/>',
+    phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+    messageCircle:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+    mapPin:'<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+    users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    arrowRight:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    arrowLeft:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    globe:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20"/><path d="M12 2a15 15 0 0 0 0 20"/>',
+    truck:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+    package:'<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/><path d="m7.5 4.27 9 5.15"/>',
+    zap:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    washingMachine:'<path d="M3 6h3"/><path d="M17 6h.01"/><rect width="18" height="20" x="3" y="2" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M12 18a2.5 2.5 0 0 0 0-5 2.5 2.5 0 0 1 0-5"/>',
+    sparkles:'<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+    droplets:'<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/>',
+    tv:'<rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/>',
+    hammer:'<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>',
+    snowflake:'<line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/>'
   };
-  const closeForm = () => { setForm(null); setError(""); };
-
-  const cancelRequest = async () => {
-    if (!request?.orderId) return;
-    await supabase.from("orders").update({ status: "CANCELLED" }).eq("id", request.orderId);
-    setRequest(null);
-    notify("Заявка отменена");
-  };
-
-  const submit = async () => {
-    if (!form) return;
-    if (!isValidPhone(user.phone)) { setError("Некорректный номер — перезайдите"); return; }
-
-    setSending(true);
-    const svc = SERVICES[form.serviceId];
-    const addressStr = joinAddress(pointA, pointB);
-
-    const { data, error: dbError } = await supabase.from("orders").insert([{
-      client_phone: normalizePhone(user.phone),
-      service_id: form.serviceId,
-      hunter: svc.hunter,
-      status: "NEW",
-      address: addressStr,
-      variant_id: form.sub,
-    }]).select().single();
-
-    setSending(false);
-    if (dbError) { setError("Ошибка: " + dbError.message); return; }
-
-    setRequest({
-      orderId: data.id,
-      serviceTitle: svc.label,
-      sub: form.sub,
-      phone: user.phone,
-      address: data.address,
-    });
-    setForm(null); setError("");
-    notify("Заявка отправлена — ищем исполнителя");
-  };
-
-  T.useEffect(() => {
-    if (form && formRef.current) {
-      try { formRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch {}
-    }
-  }, [form]);
-
-  if (request) {
-    return p("div", { className: "flex flex-1 flex-col pb-2", children: [
-      p("div", { className: "mt-1 flex items-center justify-between gap-3 rounded-[16px] bg-[var(--surface)] p-3", children: [
-        p("div", { className: "min-w-0", children: [
-          p("p", { className: "flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#8affbc]", children: [a(Icon, { name: "radar", size: 15, className: "shrink-0" }), " Поиск исполнителя"] }),
-          p("p", { className: "mt-1 truncate text-[14px] font-bold leading-snug", children: request.serviceTitle }),
-        ] }),
-        a("button", { type: "button", onClick: cancelRequest, className: "shrink-0 rounded-full border border-[rgba(43,212,107,.55)] px-4 py-2.5 text-[13px] font-bold text-[#5dff9b]", children: "Отменить" }),
-      ] }),
-      a(RadarCard, { request, onCancel: cancelRequest }),
-      a("p", { className: "mt-3 rounded-[12px] bg-[var(--surface)] px-3 py-2.5 text-center text-[12px] leading-relaxed text-[var(--muted)]", children: "Другие услуги скрыты, пока идёт поиск." }),
-    ] });
+  function Icon(props){
+    return a('svg',{xmlns:'http://www.w3.org/2000/svg',width:props.size||20,height:props.size||20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:'2',strokeLinecap:'round',strokeLinejoin:'round',className:props.className||'',dangerouslySetInnerHTML:{__html:ICONS[props.name]||''}});
   }
 
-  const formBlock = form && p("div", { ref: formRef, className: "mt-4 rounded-[16px] bg-[var(--surface)] p-4 ring-2 ring-[var(--gold)]", children: [
-    p("h2", { className: "text-[17px] font-extrabold leading-snug", children: ["Оформление заявки — ", SERVICES[form.serviceId].label, form.sub !== SERVICES[form.serviceId].label ? " · " + form.sub : ""] }),
-    a("p", { className: "mt-1 text-[13px] leading-relaxed text-[var(--muted)]", children: "Заявка будет создана от вашего номера." }),
-    p("div", { className: "mt-3 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-2.5", children: [
-      a(Icon, { name: "phone", size: 14, className: "text-[var(--gold)]" }),
-      a("span", { className: "text-[13px] font-semibold", children: user.phone }),
-    ] }),
-    p("div", { className: "mt-3 flex flex-col gap-3", children: [
-      p("div", { children: [ a("label", { className: "text-[12px] text-[var(--muted)]", children: "Точка А (по желанию)" }), a("input", { value: pointA, onChange: (e) => setPointA(e.target.value.slice(0, 80)), placeholder: "Откуда", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }) ] }),
-      p("div", { children: [ a("label", { className: "text-[12px] text-[var(--muted)]", children: "Точка Б (по желанию)" }), a("input", { value: pointB, onChange: (e) => setPointB(e.target.value.slice(0, 80)), placeholder: "Куда", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }) ] }),
-    ] }),
-    error && a("p", { className: "mt-3 text-[12px] text-[var(--red)]", role: "alert", children: error }),
-    a("button", { type: "button", onClick: submit, disabled: sending, className: "mt-4 w-full rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black disabled:opacity-40", children: sending ? "Отправка..." : "Отправить заявку" }),
-    a("button", { type: "button", onClick: closeForm, className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] py-3 text-[13px] font-semibold text-[var(--muted)]", children: "Отмена" }),
-  ] });
-
-  return p("div", { className: "flex flex-1 flex-col pb-2", children: [
-    a("h1", { className: "mt-1 text-[24px] font-extrabold leading-tight text-white", children: "Что нужно?" }),
-    a("p", { className: "mt-1 text-[13px] leading-relaxed text-[var(--muted)]", children: "Зашёл, выбрал — и всё." }),
-
-    // ===== БАННЕР АКТИВНОГО ТАКСИ-ЗАКАЗА =====
-    activeTaxiOrder && p("button", {
-      type: "button", onClick: onOpenTaxi,
-      className: "mt-4 flex w-full items-center gap-3 rounded-[16px] bg-[var(--green-soft)] p-4 text-left ring-2 ring-[var(--green)]",
-      children: [
-        a("span", { className: "text-[28px]", children: "🚖" }),
-        p("span", { className: "flex-1 min-w-0", children: [
-          a("span", { className: "block text-[13px] font-bold text-[var(--green)]", children: "Активный заказ такси" }),
-          a("span", { className: "mt-0.5 block truncate text-[12px] text-white", children: TAXI_STAGE_LABEL[activeTaxiOrder.taxi_stage] || "В работе" }),
-        ]}),
-        a(Icon, { name: "chevronRight", size: 20, className: "text-[var(--green)]" }),
-      ],
-    }),
-
-    // ===== БОЛЬШАЯ КНОПКА ТАКСИ =====
-    p("button", {
-      type: "button", onClick: onOpenTaxi,
-      className: "mt-4 flex w-full items-center gap-3 rounded-[20px] p-5 text-left text-black",
-      style: { background: "linear-gradient(135deg, #E8B84B 0%, #FFB84D 100%)" },
-      children: [
-        a("span", { className: "text-[40px]", children: "🚖" }),
-        p("span", { className: "flex-1", children: [
-          a("span", { className: "block text-[18px] font-extrabold", children: "Бишкек Такси" }),
-          a("span", { className: "mt-0.5 block text-[12px] font-semibold opacity-70", children: "Посадка + километраж" }),
-          a("span", { className: "mt-0.5 block text-[11px] font-semibold opacity-60", children: "Без комиссии для водителя" }),
-        ]}),
-        a(Icon, { name: "arrowRight", size: 24 }),
-      ],
-    }),
-
-    // ===== HUNTER 01 =====
-    p("div", { className: "mt-6 flex items-center justify-between", children: [
-      a("h2", { className: "text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]", children: "HUNTER 01 · Спецтехника" }),
-      a("span", { className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]", children: "3 услуги" }),
-    ] }),
-    a("div", { className: "mt-3 flex flex-col gap-3", children: HUNTER1_SERVICES.map((svcId) => {
-      const svc = SERVICES[svcId];
-      const subs = TRANSPORT_SUBS[svcId] || [];
-      const isOpen = openId === svcId;
-      return p("section", { className: "rounded-[16px] bg-[#1E1E1E] p-4", children: [
-        p("div", { className: "flex w-full items-center gap-2", children: [
-          p("button", { type: "button", onClick: () => setOpenId(isOpen ? null : svcId), "aria-expanded": isOpen, className: "flex min-w-0 flex-1 items-center gap-3 text-left", children: [
-            a("span", { className: "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: svc.icon, size: 22, className: "text-[var(--gold)]" }) }),
-            p("span", { className: "min-w-0 flex-1", children: [
-              a("span", { className: "block text-[16px] font-bold leading-snug text-white", children: svc.label }),
-              p("span", { className: "mt-1 block text-[12px] text-[var(--muted)]", children: [subs.length, " вариантов"] }),
-            ] }),
-          ] }),
-          a("button", { type: "button", onClick: () => setOpenId(isOpen ? null : svcId), "aria-label": isOpen ? "Свернуть" : "Развернуть", className: "flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]", children: a(Icon, { name: "chevronDown", size: 18, className: isOpen ? "rotate-180 transition" : "" }) }),
-        ] }),
-        isOpen && a("div", { className: "mt-4 flex flex-col gap-2", children: subs.map((sub) =>
-          a("button", { key: sub, type: "button", onClick: () => openForm(svcId, sub), className: "w-full rounded-[12px] bg-[var(--surface-2)] px-4 py-3 text-left text-[14px] font-semibold text-white", children: sub })
-        ) }),
-        form?.serviceId === svcId && formBlock,
-      ]}, svcId);
-    }) }),
-
-    // ===== HUNTER 02 =====
-    p("div", { className: "mt-6 flex items-center justify-between", children: [
-      a("h2", { className: "text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]", children: "HUNTER 02 · Мастера" }),
-      a("span", { className: "rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]", children: "8 услуг" }),
-    ] }),
-    a("div", { className: "mt-3 flex flex-col gap-3", children: HUNTER2_SERVICES.map((svcId) => {
-      const svc = SERVICES[svcId];
-      return p("section", { className: "rounded-[16px] bg-[#1E1E1E] p-4", children: [
-        p("button", { type: "button", onClick: () => openForm(svcId, svc.label), className: "flex w-full items-center gap-3 text-left", children: [
-          a("span", { className: "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: svc.icon, size: 22, className: "text-[var(--gold)]" }) }),
-          p("span", { className: "min-w-0 flex-1", children: [
-            a("span", { className: "block text-[16px] font-bold leading-snug text-white", children: svc.label }),
-            a("span", { className: "mt-0.5 block text-[12px] text-[var(--muted)]", children: "Нажмите — зашёл, выбрал" }),
-          ] }),
-          a(Icon, { name: "chevronRight", size: 18, className: "text-[var(--muted)]" }),
-        ] }),
-        form?.serviceId === svcId && formBlock,
-      ]}, svcId);
-    }) }),
-  ] });
-}
-
-/* ============================ TAXI ORDER SCREEN ============================ */
-function MapPicker({ initial, onPick, onClose }) {
-  const ref = T.useRef(null);
-  T.useEffect(() => {
-    const L = window.L;
-    if (!L || !ref.current) return;
-    const map = L.map(ref.current).setView(
-      initial ? [initial.lat, initial.lng] : [42.8746, 74.5698], 13
-    );
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap", maxZoom: 19,
-    }).addTo(map);
-    let marker = initial ? L.marker([initial.lat, initial.lng]).addTo(map) : null;
-    map.on("click", (e) => {
-      const { lat, lng } = e.latlng;
-      if (marker) marker.setLatLng([lat, lng]);
-      else marker = L.marker([lat, lng]).addTo(map);
-      onPick({ lat, lng });
+  /* ===================== AUTH HOOK ===================== */
+  function useAuth(){
+    var u=T.useState(function(){
+      try{
+        var raw=localStorage.getItem(STORAGE_KEY);if(!raw)return null;
+        var parsed=JSON.parse(raw);
+        if(parsed&&isValidPhone(parsed.phone))return parsed;
+        return null;
+      }catch(e){return null;}
     });
-    return () => map.remove();
-  }, []);
+    var user=u[0],setUser=u[1];
+    function register(data){
+      var payload={phone:normalizePhone(data.phone),name:(data.name||'').trim()||normalizePhone(data.phone)};
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(payload));}catch(e){}
+      setUser(payload);
+      supabase.from('orders').insert([{
+        client_phone:payload.phone,service_id:'registration',
+        hunter:'CLIENT',status:'REGISTERED',address:payload.name
+      }]).then(function(r){if(r.error)console.error(r.error.message);});
+    }
+    function logout(){
+      try{localStorage.removeItem(STORAGE_KEY);}catch(e){}
+      setUser(null);
+    }
+    return{user:user,register:register,logout:logout};
+  }
 
-  return p("div", { className: "map-picker-box", children: [
-    p("div", { className: "flex items-center justify-between bg-[var(--surface)] p-3", children: [
-      p("span", { className: "text-[14px] font-bold", children: "Тапните по карте" }),
-      a("button", { onClick: onClose, className: "rounded-full bg-[var(--surface-2)] p-2", children: a(Icon, { name: "x", size: 18 }) }),
-    ]}),
-    a("div", { ref, style: { flex: 1 } }),
-  ]});
-}
+  /* ===================== AUTH SCREEN ===================== */
+  function AuthScreen(props){
+    var s1=T.useState('+996');var phone=s1[0],setPhone=s1[1];
+    var s2=T.useState('');var name=s2[0],setName=s2[1];
+    var s3=T.useState('');var error=s3[0],setError=s3[1];
+    var phoneOk=isValidPhone(phone);
+    function submit(){
+      if(!phoneOk){setError('Введите +996 и 9 цифр');return;}
+      setError('');props.onRegister({phone:normalizePhone(phone),name:name.trim()});
+    }
+    return p('div',{className:'flex flex-1 flex-col pb-4'},[
+      p('div',{className:'mt-8 flex flex-col items-center text-center'},[
+        a('div',{className:'flex h-16 w-16 items-center justify-center rounded-[18px] bg-[var(--gold)] text-[26px] font-black text-black'},'K'),
+        a('h1',{className:'mt-5 text-[26px] font-extrabold leading-tight text-white'},'Добро пожаловать'),
+        a('p',{className:'mt-2 max-w-[300px] text-[13px] leading-relaxed text-[var(--muted)]'},'Зарегистрируйтесь по номеру телефона')
+      ]),
+      p('section',{className:'mt-6 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('label',{className:'text-[12px] text-[var(--muted)]'},'Телефон * · +996'),
+        a('input',{type:'tel',inputMode:'tel',maxLength:20,value:phone,
+          onChange:function(e){setPhone(normalizePhone(e.target.value));},
+          placeholder:'+996 704 644 876',
+          className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-4 text-[16px] outline-none'}),
+        p('p',{className:'mt-1.5 text-[12px] text-[var(--muted)]'},PHONE_HINT+' · '+phoneDigitsCount(phone)+' из 9'),
+        a('label',{className:'mt-3 block text-[12px] text-[var(--muted)]'},'Ваше имя (по желанию)'),
+        a('input',{value:name,onChange:function(e){setName(e.target.value.slice(0,40));},
+          placeholder:'Например, Азамат',
+          className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-4 text-[16px] outline-none'}),
+        error&&a('p',{className:'mt-3 text-[12px] text-[var(--red)]'},error),
+        a('button',{onClick:submit,disabled:!phoneOk,
+          className:'mt-4 w-full rounded-[12px] bg-[var(--gold)] py-4 text-[15px] font-bold text-black disabled:opacity-40'},'Зарегистрироваться'),
+        a('p',{className:'mt-3 text-center text-[11px] text-[var(--muted)]'},'Регистрируясь, вы соглашаетесь с условиями KYRAAN')
+      ])
+    ]);
+  }
 
-function TaxiDriverCard({ executorId, notify }) {
-  const [driver, setDriver] = T.useState(null);
-  T.useEffect(() => {
-    supabase.from("executors")
-      .select("name, phone, plate_number, variant_id, rating")
-      .eq("id", executorId).single()
-      .then(({ data }) => setDriver(data));
-  }, [executorId]);
-
-  if (!driver) return null;
-  return p("section", { className: "mt-3 rounded-[16px] bg-[var(--green-soft)] p-4 ring-2 ring-[var(--green)]", children: [
-    a("h3", { className: "text-[12px] font-bold uppercase text-[var(--green)]", children: "Ваш водитель" }),
-    p("div", { className: "mt-2 flex items-center gap-3", children: [
-      a("div", { className: "flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface)] text-[22px]", children: "🚖" }),
-      p("div", { className: "min-w-0 flex-1", children: [
-        a("p", { className: "text-[16px] font-extrabold text-white", children: driver.name || "Водитель" }),
-        a("p", { className: "text-[12px] text-[var(--muted)]", children: [(driver.variant_id || "Эконом"), " · ", (driver.plate_number || "номер не указан")].join("") }),
-      ]}),
-    ]}),
-    a("a", {
-      href: `tel:${driver.phone}`,
-      onClick: () => notify("Звоним " + (driver.name || "")),
-      className: "mt-3 flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--green)] py-3.5 text-[14px] font-extrabold text-black",
-      children: [a(Icon, { name: "phone", size: 16 }), " Позвонить водителю"],
-    }),
-  ]});
-}
-
-function TaxiOrderScreen({ notify, user, activeOrder, setActiveOrder, onBack }) {
-  const [pointA, setPointA] = T.useState(null);
-  const [pointB, setPointB] = T.useState(null);
-  const [tariff, setTariff] = T.useState("econom");
-  const [route, setRoute] = T.useState(null);
-  const [calcLoading, setCalcLoading] = T.useState(false);
-  const [picker, setPicker] = T.useState(null);
-  const [sending, setSending] = T.useState(false);
-  const [error, setError] = T.useState("");
-
-  T.useEffect(() => {
-    if (!pointA || !pointB) { setRoute(null); return; }
-    setCalcLoading(true);
-    calcRouteDistance(pointA.lat, pointA.lng, pointB.lat, pointB.lng).then((r) => {
-      setRoute(r); setCalcLoading(false);
-    });
-  }, [pointA, pointB]);
-
-  const pickFromGPS = () => {
-    if (!navigator.geolocation) { notify("Геолокация недоступна"); return; }
-    notify("Получаем GPS...");
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const addr = await reverseGeocode(latitude, longitude);
-        setPointA({ lat: latitude, lng: longitude, address: addr });
-      },
-      () => notify("Разрешите доступ к геолокации"),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
-  const onMapPick = async (target) => async ({ lat, lng }) => {
-    const addr = await reverseGeocode(lat, lng);
-    if (target === "A") setPointA({ lat, lng, address: addr });
-    else setPointB({ lat, lng, address: addr });
-    setPicker(null);
-  };
-
-  const price = route ? calcTaxiPrice(route.km, tariff) : null;
-
-  const submit = async () => {
-    if (!pointA || !pointB) { setError("Укажите точки А и Б"); return; }
-    if (!route) { setError("Маршрут ещё считается"); return; }
-    setSending(true);
-
-    const { data, error: e } = await supabase.from("orders").insert([{
-      client_phone: normalizePhone(user.phone),
-      service_id: "city_taxi",
-      hunter: "HUNTER_01",
-      status: "NEW",
-      taxi_stage: "searching",
-      address: joinAddress(pointA.address, pointB.address),
-      pickup_lat: pointA.lat, pickup_lng: pointA.lng,
-      drop_lat: pointB.lat, drop_lng: pointB.lng,
-      distance_km: route.km,
-      price_som: price,
-      taxi_tariff: tariff,
-      variant_id: TAXI_TARIFFS[tariff].label,
-    }]).select().single();
-
-    setSending(false);
-    if (e) { setError("Ошибка: " + e.message); return; }
-    setActiveOrder(data);
-    notify("Заказ отправлен — ищем водителя");
-  };
-
-  const cancelOrder = async () => {
-    if (!activeOrder) return;
-    await supabase.from("orders")
-      .update({ taxi_stage: "cancelled", status: "CANCELLED" })
-      .eq("id", activeOrder.id);
-    setActiveOrder(null);
-    notify("Заказ отменён");
-  };
-
-  const newOrder = () => {
-    setActiveOrder(null);
-    setPointA(null); setPointB(null); setRoute(null);
-  };
-
-  /* ===== ТРЕКИНГ АКТИВНОГО ЗАКАЗА ===== */
-  if (activeOrder) {
-    const stage = activeOrder.taxi_stage || "searching";
-    const stageIcon = { searching: "🔍", assigned: "🚕", arrived: "📍", riding: "🛣", done: "🏁", cancelled: "✖" }[stage] || "🚖";
-    const { pointA: addrA, pointB: addrB } = splitAddress(activeOrder.address || "");
-
-    return p("div", { className: "flex flex-1 flex-col pb-4", children: [
-      p("button", { onClick: onBack, className: "mt-2 flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]", children: [a(Icon, { name: "arrowLeft", size: 17 }), " На главную"] }),
-
-      p("div", { className: `mt-4 rounded-[20px] bg-[var(--surface)] p-5 text-center ring-2 ${stage === "done" ? "ring-[var(--green)]" : stage === "cancelled" ? "ring-[var(--red)]" : "ring-[var(--gold)] pulse-soft"}`, children: [
-        a("div", { className: "text-[44px]", children: stageIcon }),
-        a("h2", { className: "mt-2 text-[20px] font-extrabold", children: TAXI_STAGE_LABEL[stage] || "В работе" }),
-        activeOrder.price_som && a("p", { className: "mt-2 text-[28px] font-black text-[var(--gold)]", children: [activeOrder.price_som, " сом"] }),
-        activeOrder.distance_km && a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: [activeOrder.variant_id, " · ", activeOrder.distance_km, " км"] }),
-      ]}),
-
-      p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-        a("h3", { className: "text-[12px] font-bold uppercase tracking-wider text-[var(--muted)]", children: "Маршрут" }),
-        addrA && p("p", { className: "mt-2 text-[13px] leading-relaxed" }, [
-          a("span", { className: "text-[var(--muted)]", children: "Откуда: " }),
-          a("b", { children: addrA }),
+  /* ===================== HEADER ===================== */
+  function Header(props){
+    return p('header',{className:'flex items-center justify-between py-4'},[
+      p('div',{className:'flex items-center gap-3'},[
+        a('div',{className:'flex h-10 w-10 items-center justify-center rounded-[12px] bg-[var(--gold)] text-[16px] font-black text-black'},'K'),
+        p('div',{},[
+          a('p',{className:'text-[18px] font-extrabold leading-none'},'KYRAAN'),
+          a('p',{className:'mt-1 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]'},props.label)
+        ])
+      ]),
+      p('div',{className:'flex items-center gap-2'},[
+        p('button',{onClick:function(e){e.stopPropagation();props.onLogout();},
+          className:'flex items-center gap-1.5 rounded-full bg-[var(--surface)] px-3 py-1.5'},[
+          a(Icon,{name:'phone',size:12,className:'text-[var(--gold)]'}),
+          a('span',{className:'text-[11px] font-semibold'},props.user?props.user.phone.slice(-9):'')
         ]),
-        addrB && p("p", { className: "mt-1 text-[13px] leading-relaxed" }, [
-          a("span", { className: "text-[var(--muted)]", children: "Куда: " }),
-          a("b", { children: addrB }),
+        a('button',{onClick:function(e){e.stopPropagation();props.onBell();},
+          className:'flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface)]'},[
+          a(Icon,{name:'bell',size:17})
+        ])
+      ])
+    ]);
+  }
+
+  function Toast(props){
+    if(!props.text)return null;
+    return p('div',{className:'mb-3 flex items-start gap-2 rounded-[16px] bg-[var(--surface)] p-4 text-[13px]'},[
+      a(Icon,{name:'check',size:17,className:'mt-0.5 shrink-0 text-[var(--green)]'}),
+      a('span',{className:'flex-1'},props.text),
+      a('button',{onClick:function(){props.onClose();},className:'ml-auto shrink-0 text-[var(--muted)]'},a(Icon,{name:'x',size:16}))
+    ]);
+  }
+
+  function BottomNav(props){
+    var items=[
+      {id:'home',label:'Главная',icon:'home'},
+      {id:'taxi',label:'Такси',icon:'car'},
+      {id:'workers',label:'Рабочие',icon:'users'},
+      {id:'market',label:'Маркет',icon:'shoppingBag'}
+    ];
+    return a('nav',{className:'sticky bottom-0 mt-4 bg-[var(--bg)] pb-2 pt-2'},[
+      p('div',{key:'inner',className:'flex rounded-[16px] bg-[var(--surface)] p-2'},items.map(function(it){
+        return p('button',{key:it.id,onClick:function(){props.setTab(it.id);},
+          className:'flex flex-1 flex-col items-center gap-1 rounded-[12px] py-2 text-[11px] font-semibold '+(props.tab===it.id?'bg-[var(--surface-2)] text-white':'text-[var(--muted)]')},[
+          a(Icon,{name:it.icon,size:20}),
+          a('span',{},it.label)
+        ]);
+      }))
+    ]);
+  }
+
+  /* ===================== RADAR (non-taxi) ===================== */
+  function RadarCard(props){
+    var addr=splitAddress(props.request.address||'');
+    return p('div',{className:'radar-card mt-4 overflow-hidden rounded-[24px] p-7 text-center'},[
+      a('div',{className:'mx-auto flex h-[232px] w-[232px] items-center justify-center'},[
+        p('div',{className:'radar-scope relative h-full w-full overflow-hidden rounded-full'},[
+          a('span',{className:'radar-ring absolute inset-[18px] rounded-full'}),
+          a('span',{className:'radar-ring-2 absolute inset-[38px] rounded-full'}),
+          a('span',{className:'radar-ring-3 absolute inset-[60px] rounded-full'}),
+          a('span',{className:'absolute left-1/2 top-0 h-full w-px bg-[rgba(43,212,107,.34)]'}),
+          a('span',{className:'absolute left-0 top-1/2 h-px w-full bg-[rgba(43,212,107,.34)]'}),
+          a('span',{className:'radar-sweep absolute inset-0 rounded-full'}),
+          a('span',{className:'radar-blip absolute left-[68%] top-[28%] h-3 w-3 rounded-full bg-[#8affbc]'}),
+          a('span',{className:'radar-center absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#59ff9b]'})
+        ])
+      ]),
+      p('p',{className:'mt-5 flex items-center justify-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.22em] text-[#8affbc]'},[
+        a(Icon,{name:'radar',size:18}),
+        ' Радар активен'
+      ]),
+      a('h3',{className:'mt-4 text-[27px] font-black leading-tight text-[#5dff9b]'},'Заявка отправлена'),
+      p('div',{className:'mt-5 rounded-[16px] border border-[rgba(43,212,107,.35)] bg-[rgba(1,18,9,.72)] px-5 py-5 text-left'},[
+        p('p',{className:'text-[18px] font-extrabold leading-snug text-white'},props.request.serviceTitle),
+        p('p',{className:'mt-2 text-[16px] font-bold text-[#b8ffcf]'},'Телефон: '+props.request.phone),
+        addr.pointA&&p('p',{className:'mt-2 text-[14px] text-white'},'Откуда: '+addr.pointA),
+        addr.pointB&&p('p',{className:'mt-1 text-[14px] text-white'},'Куда: '+addr.pointB)
+      ]),
+      a('p',{className:'mt-4 text-[15px] font-semibold text-[#b8ffcf]'},'Исполнитель перезвонит.'),
+      a('button',{onClick:function(){props.onCancel();},
+        className:'mt-5 w-full rounded-[14px] border-2 border-[#2bd46b] py-3.5 text-[15px] font-extrabold text-[#5dff9b]'},'Отменить заявку')
+    ]);
+  }
+
+  /* ===================== HOME ===================== */
+  function HomeScreen(props){
+    var s1=T.useState(null);var openId=s1[0],setOpenId=s1[1];
+    var s2=T.useState(null);var form=s2[0],setForm=s2[1];
+    var s3=T.useState('');var pointA=s3[0],setPointA=s3[1];
+    var s4=T.useState('');var pointB=s4[0],setPointB=s4[1];
+    var s5=T.useState('');var error=s5[0],setError=s5[1];
+    var s6=T.useState(null);var request=s6[0],setRequest=s6[1];
+    var s7=T.useState(false);var sending=s7[0],setSending=s7[1];
+
+    function openForm(svcId,sub){setOpenId(svcId);setForm({serviceId:svcId,sub:sub});setPointA('');setPointB('');setError('');}
+    function closeForm(){setForm(null);setError('');}
+    
+    function cancelRequest(){
+      if(!request||!request.orderId)return;
+      supabase.from('orders').update({status:'CANCELLED'}).eq('id',request.orderId).then(function(){
+        setRequest(null);props.notify('Заявка отменена');
+      });
+    }
+
+    function submit(){
+      if(!form)return;
+      if(!isValidPhone(props.user.phone)){setError('Перезайдите в аккаунт');return;}
+      setSending(true);
+      var svc=SERVICES[form.serviceId];
+      var addressStr=joinAddress(pointA,pointB);
+      supabase.from('orders').insert([{
+        client_phone:normalizePhone(props.user.phone),
+        service_id:form.serviceId,
+        hunter:svc.hunter,
+        status:'NEW',
+        address:addressStr,
+        variant_id:form.sub
+      }]).select().single().then(function(res){
+        setSending(false);
+        if(res.error){setError('Ошибка: '+res.error.message);return;}
+        setRequest({orderId:res.data.id,serviceTitle:svc.label,sub:form.sub,phone:props.user.phone,address:res.data.address});
+        setForm(null);setError('');
+        props.notify('Заявка отправлена');
+      });
+    }
+
+    if(request){
+      return p('div',{className:'flex flex-1 flex-col pb-2'},[
+        p('div',{className:'mt-1 flex items-center justify-between gap-3 rounded-[16px] bg-[var(--surface)] p-3'},[
+          p('div',{className:'min-w-0'},[
+            p('p',{className:'flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#8affbc]'},[
+              a(Icon,{name:'radar',size:15}),' Поиск исполнителя'
+            ]),
+            p('p',{className:'mt-1 truncate text-[14px] font-bold'},request.serviceTitle)
+          ]),
+          a('button',{onClick:cancelRequest,className:'shrink-0 rounded-full border border-[rgba(43,212,107,.55)] px-4 py-2.5 text-[13px] font-bold text-[#5dff9b]'},'Отменить')
         ]),
-      ]}),
+        a(RadarCard,{request:request,onCancel:cancelRequest})
+      ]);
+    }
 
-      ["assigned", "arrived", "riding"].includes(stage) && activeOrder.executor_id && a(TaxiDriverCard, { executorId: activeOrder.executor_id, notify }),
+    var formBlock=form&&p('div',{className:'mt-4 rounded-[16px] bg-[var(--surface)] p-4 ring-2 ring-[var(--gold)]'},[
+      p('h2',{className:'text-[16px] font-extrabold'},'Оформление — '+SERVICES[form.serviceId].label+(form.sub&&form.sub!==SERVICES[form.serviceId].label?' · '+form.sub:'')),
+      p('div',{className:'mt-3 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-2.5'},[
+        a(Icon,{name:'phone',size:14,className:'text-[var(--gold)]'}),
+        a('span',{className:'text-[13px] font-semibold'},props.user.phone)
+      ]),
+      a('label',{className:'mt-3 block text-[12px] text-[var(--muted)]'},'Точка А (по желанию)'),
+      a('input',{value:pointA,onChange:function(e){setPointA(e.target.value.slice(0,80));},placeholder:'Откуда',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+      a('label',{className:'mt-3 block text-[12px] text-[var(--muted)]'},'Точка Б (по желанию)'),
+      a('input',{value:pointB,onChange:function(e){setPointB(e.target.value.slice(0,80));},placeholder:'Куда',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+      error&&a('p',{className:'mt-3 text-[12px] text-[var(--red)]'},error),
+      a('button',{onClick:submit,disabled:sending,className:'mt-4 w-full rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black disabled:opacity-40'},sending?'Отправка...':'Отправить заявку'),
+      a('button',{onClick:closeForm,className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] py-3 text-[13px] font-semibold text-[var(--muted)]'},'Отмена')
+    ]);
 
-      ["searching", "assigned"].includes(stage) && a("button", {
-        onClick: cancelOrder,
-        className: "mt-3 w-full rounded-[14px] border-2 border-[var(--red)] py-3.5 text-[14px] font-extrabold text-[var(--red)]",
-        children: "Отменить заказ",
+    return p('div',{className:'flex flex-1 flex-col pb-2'},[
+      a('h1',{className:'mt-1 text-[24px] font-extrabold'},'Что нужно?'),
+      a('p',{className:'mt-1 text-[13px] text-[var(--muted)]'},'Зашёл, выбрал — и всё.'),
+
+      props.activeTaxiOrder&&p('button',{onClick:props.onOpenTaxi,className:'mt-4 flex w-full items-center gap-3 rounded-[16px] bg-[var(--green-soft)] p-4 text-left ring-2 ring-[var(--green)]'},[
+        a('span',{className:'text-[28px]'},'🚖'),
+        p('span',{className:'flex-1 min-w-0'},[
+          a('span',{className:'block text-[13px] font-bold text-[var(--green)]'},'Активный заказ такси'),
+          a('span',{className:'mt-0.5 block truncate text-[12px] text-white'},TAXI_STAGE_LABEL[props.activeTaxiOrder.taxi_stage]||'В работе')
+        ]),
+        a(Icon,{name:'chevronRight',size:20,className:'text-[var(--green)]'})
+      ]),
+
+      p('button',{onClick:props.onOpenTaxi,className:'mt-4 flex w-full items-center gap-3 rounded-[20px] p-5 text-left text-black',
+        style:{background:'linear-gradient(135deg,#E8B84B 0%,#FFB84D 100%)'}},[
+        a('span',{className:'text-[40px]'},'🚖'),
+        p('span',{className:'flex-1'},[
+          a('span',{className:'block text-[18px] font-extrabold'},'Бишкек Такси'),
+          a('span',{className:'mt-0.5 block text-[12px] font-semibold opacity-70'},'Посадка + километраж'),
+          a('span',{className:'mt-0.5 block text-[11px] opacity-60'},'Без комиссии для водителя')
+        ]),
+        a(Icon,{name:'arrowRight',size:24})
+      ]),
+
+      p('div',{className:'mt-6 flex items-center justify-between'},[
+        a('h2',{className:'text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]'},'HUNTER 01 · Спецтехника'),
+        a('span',{className:'rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]'},'3 услуги')
+      ]),
+      p('div',{className:'mt-3 flex flex-col gap-3'},HUNTER1_SERVICES.map(function(svcId){
+        var svc=SERVICES[svcId];var subs=TRANSPORT_SUBS[svcId]||[];var isOpen=openId===svcId;
+        return p('section',{key:svcId,className:'rounded-[16px] bg-[#1E1E1E] p-4'},[
+          p('div',{className:'flex items-center gap-2'},[
+            p('button',{onClick:function(){setOpenId(isOpen?null:svcId);},className:'flex min-w-0 flex-1 items-center gap-3 text-left'},[
+              a('span',{className:'flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]'},a(Icon,{name:svc.icon,size:22,className:'text-[var(--gold)]'})),
+              p('span',{className:'min-w-0 flex-1'},[
+                a('span',{className:'block text-[16px] font-bold text-white'},svc.label),
+                p('span',{className:'mt-1 block text-[12px] text-[var(--muted)]'},subs.length+' вариантов')
+              ])
+            ]),
+            a('button',{onClick:function(){setOpenId(isOpen?null:svcId);},className:'flex h-11 w-11 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]'},[
+              a(Icon,{name:'chevronDown',size:18,className:isOpen?'rotate-180':''})
+            ])
+          ]),
+          isOpen&&a('div',{className:'mt-4 flex flex-col gap-2'},subs.map(function(sub){
+            return a('button',{key:sub,onClick:function(){openForm(svcId,sub);},className:'w-full rounded-[12px] bg-[var(--surface-2)] px-4 py-3 text-left text-[14px] font-semibold text-white'},sub);
+          })),
+          form&&form.serviceId===svcId&&formBlock
+        ]);
       }),
 
-      stage === "done" && a("button", {
-        onClick: newOrder,
-        className: "mt-3 w-full rounded-[14px] bg-[var(--gold)] py-3.5 text-[14px] font-extrabold text-black",
-        children: "Заказать ещё",
-      }),
-
-      stage === "cancelled" && a("button", {
-        onClick: newOrder,
-        className: "mt-3 w-full rounded-[14px] bg-[var(--surface-2)] py-3.5 text-[14px] font-extrabold",
-        children: "Вернуться",
-      }),
-    ]});
+      p('div',{className:'mt-6 flex items-center justify-between'},[
+        a('h2',{className:'text-[12px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]'},'HUNTER 02 · Мастера'),
+        a('span',{className:'rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]'},'8 услуг')
+      ]),
+      p('div',{className:'mt-3 flex flex-col gap-3'},HUNTER2_SERVICES.map(function(svcId){
+        var svc=SERVICES[svcId];
+        return p('section',{key:svcId,className:'rounded-[16px] bg-[#1E1E1E] p-4'},[
+          p('button',{onClick:function(){openForm(svcId,svc.label);},className:'flex w-full items-center gap-3 text-left'},[
+            a('span',{className:'flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]'},a(Icon,{name:svc.icon,size:22,className:'text-[var(--gold)]'})),
+            p('span',{className:'min-w-0 flex-1'},[
+              a('span',{className:'block text-[16px] font-bold text-white'},svc.label),
+              a('span',{className:'mt-0.5 block text-[12px] text-[var(--muted)]'},'Нажмите — зашёл, выбрал')
+            ]),
+            a(Icon,{name:'chevronRight',size:18,className:'text-[var(--muted)]'})
+          ]),
+          form&&form.serviceId===svcId&&formBlock
+        ]);
+      })
+    ]);
   }
 
-  /* ===== ФОРМА ЗАКАЗА ===== */
-  return p("div", { className: "flex flex-1 flex-col pb-4", children: [
-    p("button", { onClick: onBack, className: "mt-2 flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]", children: [a(Icon, { name: "arrowLeft", size: 17 }), " Назад"] }),
+  /* ===================== MAP PICKER ===================== */
+  function MapPicker(props){
+    var ref=T.useRef(null);
+    T.useEffect(function(){
+      var L=window.L;if(!L||!ref.current)return;
+      var center=props.initial?[props.initial.lat,props.initial.lng]:[42.8746,74.5698];
+      var map=L.map(ref.current).setView(center,13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19}).addTo(map);
+      var marker=props.initial?L.marker(center).addTo(map):null;
+      map.on('click',function(e){
+        var lat=e.latlng.lat,lng=e.latlng.lng;
+        if(marker)marker.setLatLng([lat,lng]);else marker=L.marker([lat,lng]).addTo(map);
+        props.onPick({lat:lat,lng:lng});
+      });
+      return function(){map.remove();};
+    },[]);
+    return p('div',{className:'map-picker-box'},[
+      p('div',{className:'flex items-center justify-between bg-[var(--surface)] p-3'},[
+        p('span',{className:'text-[14px] font-bold'},'Тапните по карте'),
+        a('button',{onClick:props.onClose,className:'rounded-full bg-[var(--surface-2)] p-2'},a(Icon,{name:'x',size:18}))
+      ]),
+      a('div',{ref:ref,style:{flex:1}})
+    ]);
+  }
 
-    a("h1", { className: "mt-4 text-[26px] font-extrabold", children: "🚖 Бишкек Такси" }),
-    a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: "Посадка + километраж · без комиссии" }),
+  /* ===================== DRIVER CARD ===================== */
+  function TaxiDriverCard(props){
+    var s=T.useState(null);var driver=s[0],setDriver=s[1];
+    T.useEffect(function(){
+      supabase.from('executors').select('name,phone,plate_number,variant_id,rating').eq('id',props.executorId).single()
+        .then(function(r){setDriver(r.data);});
+    },[props.executorId]);
+    if(!driver)return null;
+    return p('section',{className:'mt-3 rounded-[16px] bg-[var(--green-soft)] p-4 ring-2 ring-[var(--green)]'},[
+      a('h3',{className:'text-[12px] font-bold uppercase text-[var(--green)]'},'Ваш водитель'),
+      p('div',{className:'mt-2 flex items-center gap-3'},[
+        a('div',{className:'flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface)] text-[22px]'},'🚖'),
+        p('div',{className:'min-w-0 flex-1'},[
+          a('p',{className:'text-[16px] font-extrabold text-white'},driver.name||'Водитель'),
+          a('p',{className:'text-[12px] text-[var(--muted)]'},(driver.variant_id||'Эконом')+' · '+(driver.plate_number||'номер не указан'))
+        ])
+      ]),
+      a('a',{href:'tel:'+digits(driver.phone),onClick:function(){props.notify('Звоним');},
+        className:'mt-3 flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--green)] py-3.5 text-[14px] font-extrabold text-black'},[
+        a(Icon,{name:'phone',size:16}),' Позвонить водителю'
+      ])
+    ]);
+  }
 
-    p("section", { className: "mt-4 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("label", { className: "text-[12px] font-bold uppercase text-[var(--muted)]", children: "📍 Откуда" }),
-      p("div", { className: "mt-2 flex gap-2", children: [
-        a("div", { className: "flex-1 rounded-[12px] bg-[var(--surface-2)] p-3 text-[13px] leading-relaxed", children: pointA ? pointA.address : "Не выбрано" }),
-        p("button", { onClick: pickFromGPS, className: "rounded-[12px] bg-[var(--gold)] px-3 text-[13px] font-bold text-black", children: "GPS" }),
-        p("button", { onClick: () => setPicker("A"), className: "rounded-[12px] bg-[var(--surface-2)] px-3 text-[13px] font-bold", children: "Карта" }),
-      ]}),
-    ]}),
+  /* ===================== TAXI SCREEN ===================== */
+  function TaxiOrderScreen(props){
+    var s1=T.useState(null);var pointA=s1[0],setPointA=s1[1];
+    var s2=T.useState(null);var pointB=s2[0],setPointB=s2[1];
+    var s3=T.useState('econom');var tariff=s3[0],setTariff=s3[1];
+    var s4=T.useState(null);var route=s4[0],setRoute=s4[1];
+    var s5=T.useState(false);var calcLoading=s5[0],setCalcLoading=s5[1];
+    var s6=T.useState(null);var picker=s6[0],setPicker=s6[1];
+    var s7=T.useState(false);var sending=s7[0],setSending=s7[1];
+    var s8=T.useState('');var error=s8[0],setError=s8[1];
 
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("label", { className: "text-[12px] font-bold uppercase text-[var(--muted)]", children: "🏁 Куда" }),
-      p("div", { className: "mt-2 flex gap-2", children: [
-        a("div", { className: "flex-1 rounded-[12px] bg-[var(--surface-2)] p-3 text-[13px] leading-relaxed", children: pointB ? pointB.address : "Не выбрано" }),
-        p("button", { onClick: () => setPicker("B"), className: "rounded-[12px] bg-[var(--surface-2)] px-3 text-[13px] font-bold", children: "Карта" }),
-      ]}),
-    ]}),
+    T.useEffect(function(){
+      if(!pointA||!pointB){setRoute(null);return;}
+      setCalcLoading(true);
+      calcRouteDistance(pointA.lat,pointA.lng,pointB.lat,pointB.lng).then(function(r){
+        setRoute(r);setCalcLoading(false);
+      });
+    },[pointA,pointB]);
 
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("label", { className: "text-[12px] font-bold uppercase text-[var(--muted)]", children: "Тариф" }),
-      p("div", { className: "mt-2 grid grid-cols-2 gap-2", children: Object.entries(TAXI_TARIFFS).map(([id, t]) =>
-        p("button", { key: id, onClick: () => setTariff(id), "aria-pressed": tariff === id,
-          className: "rounded-[12px] p-3 text-left transition",
-          style: {
-            background: tariff === id ? t.color + "22" : "var(--surface-2)",
-            boxShadow: tariff === id ? `0 0 0 2px ${t.color}` : "none",
-          },
-          children: [
-            a("div", { className: "text-[18px]", children: t.emoji }),
-            a("div", { className: "mt-1 text-[13px] font-bold", children: t.label }),
-            a("div", { className: "mt-0.5 text-[11px] text-[var(--muted)]", children: `${t.base} + ${t.perKm}/км` }),
-          ]
-        })
-      )}),
-    ]}),
-
-    pointA && pointB && p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      calcLoading
-        ? a("p", { className: "text-center text-[13px] text-[var(--muted)]", children: "Считаем маршрут..." })
-        : route
-          ? p("div", { className: "flex items-center justify-between", children: [
-              p("div", { children: [
-                a("p", { className: "text-[13px] text-[var(--muted)]", children: `${route.km} км · ~${route.minutes} мин` }),
-                a("p", { className: "mt-0.5 text-[11px] text-[var(--muted)]", children: `Посадка ${TAXI_TARIFFS[tariff].base} + ${route.km} × ${TAXI_TARIFFS[tariff].perKm}` }),
-              ]}),
-              a("p", { className: "text-[24px] font-black text-[var(--gold)]", children: `${price} сом` }),
-            ]})
-          : a("p", { className: "text-center text-[13px] text-[var(--red)]", children: "Не удалось посчитать маршрут" }),
-    ]}),
-
-    error && a("p", { className: "mt-3 text-[12px] text-[var(--red)]", children: error }),
-
-    a("button", {
-      onClick: submit,
-      disabled: sending || !route,
-      className: "mt-4 w-full rounded-[16px] bg-[var(--gold)] py-4 text-[15px] font-extrabold text-black disabled:opacity-40",
-      children: sending ? "Отправка..." : (price ? `Заказать за ${price} сом` : "Заказать"),
-    }),
-
-    picker && a(MapPicker, {
-      initial: picker === "A" ? pointA : pointB,
-      onPick: onMapPick(picker),
-      onClose: () => setPicker(null),
-    }),
-  ]});
-}
-
-/* ============================ WORKERS ============================ */
-function WorkersScreen({ notify, user }) {
-  const [workers, setWorkers] = T.useState([]);
-  const [loading, setLoading] = T.useState(true);
-  const [filter, setFilter] = T.useState("all");
-  const [open, setOpen] = T.useState(false);
-  const [form, setForm] = T.useState({ name: user.name || "", skill: "", skillOther: "", city: "" });
-  const [errors, setErrors] = T.useState({});
-  const [submitting, setSubmitting] = T.useState(false);
-
-  const skill = form.skill === "Другое" ? form.skillOther.trim() : form.skill.trim();
-
-  const loadWorkers = async () => {
-    const { data } = await supabase.from("orders")
-      .select("*")
-      .eq("service_id", "workers")
-      .order("created_at", { ascending: false });
-    if (data) {
-      setWorkers(data.map(o => {
-        const parts = (o.address || "").split(" | ");
-        return {
-          id: o.id, name: parts[0] || "Без имени", city: parts[1] || "",
-          skill: o.variant_id, kind: o.variant_id, phone: o.client_phone,
-        };
-      }));
+    function pickFromGPS(){
+      if(!navigator.geolocation){props.notify('Геолокация недоступна');return;}
+      props.notify('Получаем GPS...');
+      navigator.geolocation.getCurrentPosition(function(pos){
+        var lat=pos.coords.latitude,lng=pos.coords.longitude;
+        reverseGeocode(lat,lng).then(function(addr){
+          setPointA({lat:lat,lng:lng,address:addr});
+        });
+      },function(){props.notify('Разрешите геолокацию');},{enableHighAccuracy:true,timeout:10000});
     }
-    setLoading(false);
-  };
-
-  T.useEffect(() => { loadWorkers(); }, []);
-
-  const submit = async () => {
-    const err = {};
-    if (!form.name.trim()) err.name = "Укажите имя";
-    if (!skill) err.skill = "Выберите навык";
-    setErrors(err);
-    if (Object.keys(err).length) return;
-
-    setSubmitting(true);
-    const { error } = await supabase.from("orders").insert([{
-      service_id: "workers",
-      variant_id: skill,
-      client_phone: normalizePhone(user.phone),
-      address: `${form.name.trim()} | ${form.city.trim() || "Город не указан"}`,
-      hunter: "BOARD", status: "NEW",
-    }]);
-    setSubmitting(false);
-    if (error) { notify("Ошибка: " + error.message); return; }
-    setForm({ name: user.name || "", skill: "", skillOther: "", city: "" });
-    setOpen(false);
-    notify("Объявление опубликовано!");
-    loadWorkers();
-  };
-
-  const visible = workers.filter((w) => filter === "all" || w.kind === filter);
-
-  return p("div", { className: "flex flex-1 flex-col pb-2", children: [
-    p("section", { className: "rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("div", { className: "flex items-start justify-between gap-3", children: [
-        a("div", { children: [
-          a("h1", { className: "text-[24px] font-extrabold leading-tight", children: "Разнорабочие" }),
-          a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: "Бесплатная доска" }),
-        ] }),
-        a("span", { className: "shrink-0 rounded-full bg-[var(--green-soft)] px-3 py-1.5 text-[12px] font-bold text-[var(--green)]", children: "Бесплатно" }),
-      ] }),
-      a("button", { type: "button", onClick: () => setOpen((v) => !v), "aria-expanded": open, className: "mt-3 flex w-full items-center justify-center rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black", children: open ? "Свернуть" : "+ Подать объявление" }),
-    ] }),
-    open && p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[19px] font-extrabold", children: "Новое объявление" }),
-      p("div", { className: "mt-3 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-2.5", children: [
-        a(Icon, { name: "phone", size: 14, className: "text-[var(--gold)]" }),
-        a("span", { className: "text-[13px] font-semibold", children: user.phone }),
-      ] }),
-      p("div", { className: "mt-3", children: [
-        a("label", { className: "text-[12px] text-[var(--muted)]", children: "Имя *" }),
-        a("input", { maxLength: 50, value: form.name, onChange: (e) => setForm((prev) => ({ ...prev, name: e.target.value })), placeholder: "Ваше имя", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-        errors.name && a("p", { className: "mt-1 text-[12px] text-[var(--red)]", children: errors.name }),
-      ] }),
-      p("div", { className: "mt-3", children: [
-        a("label", { className: "text-[12px] text-[var(--muted)]", children: "Город" }),
-        a("input", { maxLength: 50, value: form.city, onChange: (e) => setForm((prev) => ({ ...prev, city: e.target.value })), placeholder: "Бишкек", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      ] }),
-      a("div", { className: "mt-3", children: [
-        a("span", { className: "text-[12px] text-[var(--muted)]", children: "Навык *" }),
-        a("div", { className: "mt-2 flex flex-wrap gap-2", children: ["Грузчик", "Разнорабочий", "Другое"].map((k) => a("button", { type: "button", onClick: () => setForm((prev) => ({ ...prev, skill: k })), "aria-pressed": form.skill === k, className: `rounded-full px-4 py-2.5 text-[13px] font-semibold ${form.skill === k ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: k }, k)) }),
-        form.skill === "Другое" && a("input", { maxLength: 40, value: form.skillOther, onChange: (e) => setForm((prev) => ({ ...prev, skillOther: e.target.value })), placeholder: "Укажите навык", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-        errors.skill && a("p", { className: "mt-1 text-[12px] text-[var(--red)]", children: errors.skill }),
-      ] }),
-      a("button", { type: "button", onClick: submit, disabled: submitting, className: "mt-4 w-full rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black disabled:opacity-40", children: submitting ? "Отправка..." : "Опубликовать" }),
-      a("button", { type: "button", onClick: () => setOpen(false), className: "mt-2 w-full py-2 text-[13px] text-[var(--muted)]", children: "Отмена" }),
-    ] }),
-    p("div", { className: "no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1", children: [{ id: "all", label: "Все" }, { id: "Грузчик", label: "Грузчики" }, { id: "Разнорабочий", label: "Разнорабочие" }, { id: "Другое", label: "Другое" }].map((k) => a("button", { type: "button", onClick: () => setFilter(k.id), "aria-pressed": filter === k.id, className: `shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold ${filter === k.id ? "bg-[var(--gold)] text-black" : "bg-[var(--surface)] text-[var(--muted)]"}`, children: k.label }, k.id)) }),
-    loading ? a("div", { className: "mt-10 flex justify-center", children: a("div", { className: "loader" }) })
-      : visible.length === 0 ? a("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-6 text-center", children: a("p", { className: "text-[13px] text-[var(--muted)]", children: "Пока нет объявлений." }) })
-      : p("div", { className: "mt-3 flex flex-col gap-3", children: visible.map((w) => a("article", { key: w.id, className: "rounded-[16px] bg-[var(--surface)] p-4", children: [
-          a("p", { className: "text-[16px] font-bold", children: w.name + " • " + w.skill }),
-          a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: w.city || "Город не указан" }),
-          a("p", { className: "mt-2 text-[13px] font-semibold", children: w.phone }),
-          a("a", { href: telHref(w.phone), className: "mt-3 flex w-full items-center justify-center rounded-[12px] bg-[var(--green)] py-3 text-[14px] font-bold text-black", children: "Позвонить" }),
-        ]}, w.id)) }),
-  ] });
-}
-
-/* ============================ MARKET ============================ */
-function MarketList({ ads, onOpen, onAdd }) {
-  const [filter, setFilter] = T.useState("all");
-  const filtered = filter === "all" ? ads : ads.filter((d) => d.category === filter);
-  return p("div", { className: "flex flex-1 flex-col", children: [
-    p("div", { className: "mt-4 flex items-start justify-between gap-3", children: [
-      p("div", { children: [ a("h1", { className: "text-[24px] font-extrabold leading-tight", children: "Маркет" }), a("p", { className: "mt-1 text-[13px] text-[var(--muted)]", children: "Транспорт, продукция и сделки" }) ] }),
-      p("button", { type: "button", onClick: onAdd, className: "flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--gold)] px-4 py-3 text-[13px] font-bold text-black", children: [a(Icon, { name: "plus", size: 16 }), " Подать"] }),
-    ] }),
-    p("div", { className: "no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1", children: [
-      p("button", { onClick: () => setFilter("all"), "aria-pressed": filter === "all", className: `shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold ${filter === "all" ? "bg-[var(--gold)] text-black" : "bg-[var(--surface)] text-[var(--muted)]"}`, children: ["Все · ", ads.length] }),
-      CATEGORIES.map((c) => a("button", { key: c.id, onClick: () => setFilter(c.id), "aria-pressed": filter === c.id, className: `shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold ${filter === c.id ? "bg-[var(--gold)] text-black" : "bg-[var(--surface)] text-[var(--muted)]"}`, children: c.short })),
-    ] }),
-    filtered.length === 0 ? p("div", { className: "mt-4 flex flex-1 flex-col items-center justify-center rounded-[16px] bg-[var(--surface)] p-6 text-center", children: [
-      a("div", { className: "flex h-16 w-16 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: "search", size: 26, className: "text-[var(--muted)]" }) }),
-      a("h2", { className: "mt-5 text-[19px] font-bold", children: "Пока нет объявлений" }),
-      a("p", { className: "mt-2 text-[13px] text-[var(--muted)]", children: "Станьте первым!" }),
-    ] }) : p("div", { className: "mt-4 flex flex-col gap-3 pb-2", children: [
-      p("p", { className: "text-[12px] uppercase tracking-[0.14em] text-[var(--muted)]", children: [filtered.length, " объявлений"] }),
-      filtered.map((ad) => {
-        const cat = categoryById(ad.category);
-        return p("button", { key: ad.id, onClick: () => onOpen(ad), className: "w-full rounded-[16px] bg-[var(--surface)] p-4 text-left", children: [
-          p("div", { className: "flex items-center gap-2", children: [
-            a("span", { className: "rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]", children: cat.short }),
-            a("span", { className: "rounded-full px-2.5 py-1 text-[11px] font-semibold bg-[var(--gold-soft)] text-[var(--gold)]", children: ad.status }),
-            p("span", { className: "ml-auto flex items-center gap-1 text-[11px] text-[var(--muted)]", children: [a(Icon, { name: "clock", size: 12 }), " ", formatDate(ad.created_at)] }),
-          ] }),
-          p("div", { className: "mt-3 flex items-start gap-3", children: [
-            a("div", { className: "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: cat.icon, size: 21, className: "text-[var(--gold)]" }) }),
-            p("div", { className: "min-w-0 flex-1", children: [
-              a("p", { className: "text-[15px] font-bold leading-snug", children: ad.title }),
-              a("p", { className: "clamp-2 mt-1 text-[13px] leading-relaxed text-[var(--muted)]", children: ad.description }),
-              a("p", { className: "mt-2 text-[13px] font-bold text-[var(--gold)]", children: formatPrice(ad) }),
-            ] }),
-            p("div", { className: "flex shrink-0 flex-col items-end gap-2", children: [
-              p("span", { className: "flex items-center gap-1 text-[12px] text-[var(--muted)]", children: [a(Icon, { name: "mapPin", size: 12 }), " ", ad.city] }),
-              a("span", { className: "flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: "arrowRight", size: 15 }) }),
-            ] }),
-          ] }),
-        ]});
-      }),
-    ] }),
-  ] });
-}
-
-function MarketForm({ initial, user, onCancel, onSave, notify }) {
-  const [v, setV] = T.useState({
-    category: initial?.category || "", title: initial?.title || "", description: initial?.description || "",
-    price: initial && !initial.negotiable ? cleanPriceForInput(initial.price) : "",
-    currency: initial?.currency || "som", negotiable: initial?.negotiable || false,
-    city: initial?.city || "",
-  });
-  const [errors, setErrors] = T.useState({});
-  const [saving, setSaving] = T.useState(false);
-  const len = v.description.trim().length;
-  const set = (key, val) => setV((prev) => ({ ...prev, [key]: val }));
-
-  const save = async () => {
-    const e = {};
-    if (!v.category) e.category = "Выберите категорию";
-    if (!v.title.trim()) e.title = "Добавьте заголовок";
-    if (len < 50) e.description = "Нужно ещё " + Math.max(0, 50 - len) + " симв.";
-    if (!v.city.trim()) e.city = "Укажите город";
-    setErrors(e);
-    if (Object.keys(e).length) return;
-
-    setSaving(true);
-    const priceStr = v.negotiable ? "Договорная" : v.price ? v.price + " " + (CURRENCIES.find(c => c.id === v.currency)?.label || "сом") : "Не указана";
-    const addressStr = `${v.title.trim()} | ${v.city.trim()} | ${v.description.trim()} | ${priceStr}`;
-    const payload = { service_id: "market", variant_id: v.category, client_phone: normalizePhone(user.phone), address: addressStr, hunter: "BOARD", status: "NEW" };
-
-    let error = null;
-    if (initial?.id) {
-      const res = await supabase.from("orders").update(payload).eq("id", initial.id);
-      error = res.error;
-    } else {
-      const res = await supabase.from("orders").insert([payload]);
-      error = res.error;
+    function onMapPick(target){
+      return function(c){
+        reverseGeocode(c.lat,c.lng).then(function(addr){
+          if(target==='A')setPointA({lat:c.lat,lng:c.lng,address:addr});
+          else setPointB({lat:c.lat,lng:c.lng,address:addr});
+          setPicker(null);
+        });
+      };
     }
-    setSaving(false);
-    if (error) notify("Ошибка: " + error.message);
-    else onSave();
-  };
 
-  return p("div", { className: "flex flex-1 flex-col pb-4", children: [
-    p("button", { type: "button", onClick: onCancel, className: "flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]", children: [a(Icon, { name: "arrowLeft", size: 17 }), " Назад"] }),
-    a("h1", { className: "mt-4 text-[24px] font-extrabold leading-tight", children: initial ? "Редактирование" : "Подача объявления" }),
-    p("section", { className: "mt-4 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Категория" }),
-      a("div", { className: "mt-3 grid gap-2", children: CATEGORIES.map((c) => p("button", { key: c.id, onClick: () => set("category", c.id), className: `flex items-center gap-3 rounded-[12px] p-3 text-left ${v.category === c.id ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)]"}`, children: [
-        a("span", { className: `flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${v.category === c.id ? "bg-black/15" : "bg-[var(--surface)]"}`, children: a(Icon, { name: c.icon, size: 18 }) }),
-        p("span", { className: "min-w-0", children: [ a("span", { className: "block text-[14px] font-bold leading-snug", children: c.short }), a("span", { className: `block text-[12px] ${v.category === c.id ? "text-black/70" : "text-[var(--muted)]"}`, children: c.hint }) ] }),
-      ])) }),
-      errors.category && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.category }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      p("div", { className: "flex items-center justify-between", children: [ a("label", { className: "text-[15px] font-bold", children: "Заголовок" }), p("span", { className: "text-[12px] text-[var(--muted)]", children: [v.title.length, " / 50"] }) ] }),
-      a("input", { maxLength: 50, value: v.title, onChange: (e) => set("title", e.target.value), placeholder: "Например: Перевозка овощей", className: "mt-3 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      errors.title && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.title }),
-      p("div", { className: "mt-4 flex items-center justify-between", children: [ a("label", { className: "text-[15px] font-bold", children: "Описание" }), p("span", { className: `text-[12px] ${len >= 50 ? "text-[var(--green)]" : "text-[var(--muted)]"}`, children: [len, " / мин. 50"] }) ] }),
-      a("textarea", { rows: 5, value: v.description, onChange: (e) => set("description", e.target.value), placeholder: "Опишите груз, маршрут, сроки...", className: "mt-3 w-full resize-none rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] leading-relaxed outline-none" }),
-      errors.description && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.description }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Цена" }),
-      p("div", { className: "mt-3 flex gap-2", children: [
-        a("button", { onClick: () => set("negotiable", false), className: `flex-1 rounded-[12px] px-3 py-3 text-[13px] font-bold ${!v.negotiable ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: "Указать" }),
-        a("button", { onClick: () => set("negotiable", true), className: `flex-1 rounded-[12px] px-3 py-3 text-[13px] font-bold ${v.negotiable ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: "Договорная" }),
-      ] }),
-      !v.negotiable && a("input", { inputMode: "decimal", value: v.price, onChange: (e) => set("price", e.target.value.replace(/[^0-9.,]/g, "")), placeholder: "15000", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      a("div", { className: "mt-2 flex flex-wrap gap-2", children: CURRENCIES.map((c) => a("button", { key: c.id, onClick: () => set("currency", c.id), className: `rounded-full px-4 py-2.5 text-[13px] font-semibold ${v.currency === c.id && !v.negotiable ? "bg-[var(--gold)] text-black" : "bg-[var(--surface-2)] text-[var(--muted)]"}`, children: c.label })) }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Город и контакты" }),
-      a("label", { className: "mt-4 block text-[12px] text-[var(--muted)]", children: "Город" }),
-      a("input", { value: v.city, onChange: (e) => set("city", e.target.value), placeholder: "Бишкек", className: "mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none" }),
-      errors.city && a("p", { className: "mt-2 text-[12px] text-[var(--red)]", children: errors.city }),
-      a("label", { className: "mt-4 block text-[12px] text-[var(--muted)]", children: "Телефон" }),
-      p("div", { className: "mt-2 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-3.5", children: [
-        a(Icon, { name: "phone", size: 14, className: "text-[var(--gold)]" }),
-        a("span", { className: "text-[14px] font-semibold", children: user.phone }),
-        a("span", { className: "ml-auto text-[11px] text-[var(--muted)]", children: "из профиля" }),
-      ] }),
-    ] }),
-    a("button", { onClick: save, disabled: saving, className: "mt-5 w-full rounded-[16px] bg-[var(--gold)] py-4 text-[15px] font-bold text-black disabled:opacity-40", children: saving ? "Сохранение..." : (initial ? "Сохранить изменения" : "Опубликовать") }),
-    a("button", { onClick: onCancel, className: "mt-2 w-full py-2 text-[13px] text-[var(--muted)]", children: "Отмена" }),
-  ] });
-}
+    var price=route?calcTaxiPrice(route.km,tariff):null;
 
-function MarketDetails({ ad, onBack, onEdit, onDelete, notify }) {
-  const cat = categoryById(ad.category);
-  const [confirmDelete, setConfirmDelete] = T.useState(false);
-  return p("div", { className: "flex flex-1 flex-col pb-4", children: [
-    p("button", { onClick: onBack, className: "flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]", children: [a(Icon, { name: "arrowLeft", size: 17 }), " Назад"] }),
-    p("section", { className: "mt-4 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      p("div", { className: "flex items-start gap-3", children: [
-        a("div", { className: "flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]", children: a(Icon, { name: cat.icon, size: 24, className: "text-[var(--gold)]" }) }),
-        p("div", { className: "min-w-0", children: [ a("h1", { className: "text-[21px] font-extrabold leading-tight", children: ad.title }), a("p", { className: "mt-2 text-[14px] font-bold text-[var(--gold)]", children: formatPrice(ad) }) ] }),
-      ] }),
-      p("div", { className: "mt-4 grid grid-cols-3 gap-2 text-center", children: [
-        p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Категория" }), a("p", { className: "mt-1 text-[12px] font-bold leading-tight", children: cat.short }) ] }),
-        p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Город" }), a("p", { className: "mt-1 text-[12px] font-bold leading-tight", children: ad.city }) ] }),
-        p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [ a("p", { className: "text-[11px] text-[var(--muted)]", children: "Дата" }), a("p", { className: "mt-1 text-[12px] font-bold leading-tight", children: formatDate(ad.created_at) }) ] }),
-      ] }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Связаться" }),
-      p("div", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-        p("a", { href: waHref(ad.whatsapp), target: "_blank", rel: "noopener", className: "flex items-center justify-center gap-2 rounded-[12px] bg-[var(--green)] py-3.5 text-[14px] font-bold text-black", children: [a(Icon, { name: "messageCircle", size: 17 }), " WhatsApp"] }),
-        p("a", { href: telHref(ad.phone), className: "flex items-center justify-center gap-2 rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black", children: [a(Icon, { name: "phone", size: 17 }), " Позвонить"] }),
-      ] }),
-    ] }),
-    p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Описание" }),
-      a("p", { className: "mt-3 whitespace-pre-wrap text-[14px] leading-relaxed text-[var(--text)]", children: ad.description }),
-    ] }),
-    ad.isOwn && p("section", { className: "mt-3 rounded-[16px] bg-[var(--surface)] p-4", children: [
-      a("h2", { className: "text-[15px] font-bold", children: "Действия" }),
-      p("div", { className: "mt-3 flex flex-col gap-2", children: [
-        p("button", { onClick: () => onEdit(ad), className: "flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--surface-2)] py-3.5 text-[14px] font-semibold", children: [a(Icon, { name: "pencil", size: 16 }), " Редактировать"] }),
-        !confirmDelete ? p("button", { onClick: () => setConfirmDelete(true), className: "flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--surface-2)] py-3.5 text-[14px] font-semibold text-[var(--red)]", children: [a(Icon, { name: "trash2", size: 16 }), " Удалить"] }) : p("div", { className: "rounded-[12px] bg-[var(--surface-2)] p-3", children: [
-          a("p", { className: "text-[13px] font-semibold text-[var(--red)]", children: "Удалить безвозвратно?" }),
-          p("div", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-            a("button", { onClick: () => onDelete(ad.id), className: "rounded-[10px] bg-[var(--red)] py-2.5 text-[13px] font-bold text-black", children: "Удалить" }),
-            a("button", { onClick: () => setConfirmDelete(false), className: "rounded-[10px] bg-[var(--surface)] py-2.5 text-[13px] font-semibold", children: "Отмена" }),
-          ] }),
-        ] }),
-      ] }),
-    ] }),
-  ] });
-}
-
-function MarketScreen({ notify, user }) {
-  const [ads, setAds] = T.useState([]);
-  const [loading, setLoading] = T.useState(true);
-  const [view, setView] = T.useState("list");
-  const [activeId, setActiveId] = T.useState(null);
-  const [editing, setEditing] = T.useState(null);
-
-  const loadAds = async () => {
-    const { data } = await supabase.from("orders")
-      .select("*").eq("service_id", "market")
-      .order("created_at", { ascending: false });
-    if (data) {
-      setAds(data.map(o => {
-        const parts = (o.address || "").split(" | ");
-        return {
-          id: o.id, title: parts[0] || "Без названия", city: parts[1] || "",
-          description: parts[2] || "", price: parts[3] || "",
-          category: o.variant_id, phone: o.client_phone, whatsapp: o.client_phone,
-          status: "Активно", created_at: o.created_at,
-          negotiable: parts[3] === "Договорная",
-          isOwn: normalizePhone(o.client_phone) === normalizePhone(user.phone),
-        };
-      }));
+    function submit(){
+      if(!pointA||!pointB){setError('Укажите А и Б');return;}
+      if(!route){setError('Маршрут считается');return;}
+      setSending(true);
+      supabase.from('orders').insert([{
+        client_phone:normalizePhone(props.user.phone),
+        service_id:'city_taxi',hunter:'HUNTER_01',status:'NEW',taxi_stage:'searching',
+        address:joinAddress(pointA.address,pointB.address),
+        pickup_lat:pointA.lat,pickup_lng:pointA.lng,
+        drop_lat:pointB.lat,drop_lng:pointB.lng,
+        distance_km:route.km,price_som:price,taxi_tariff:tariff,
+        variant_id:TAXI_TARIFFS[tariff].label
+      }]).select().single().then(function(res){
+        setSending(false);
+        if(res.error){setError('Ошибка: '+res.error.message);return;}
+        props.setActiveOrder(res.data);
+        props.notify('Заказ отправлен');
+      });
     }
-    setLoading(false);
-  };
 
-  T.useEffect(() => { loadAds(); }, []);
-  const active = ads.find((x) => x.id === activeId);
+    function cancelOrder(){
+      if(!props.activeOrder)return;
+      supabase.from('orders').update({taxi_stage:'cancelled',status:'CANCELLED'}).eq('id',props.activeOrder.id).then(function(){
+        props.setActiveOrder(null);props.notify('Отменено');
+      });
+    }
 
-  const removeAd = async (id) => {
-    const { error } = await supabase.from("orders").delete().eq("id", id);
-    if (!error) {
-      setAds((prev) => prev.filter((x) => x.id !== id));
-      setView("list"); notify("Объявление удалено");
-    } else notify("Ошибка: " + error.message);
-  };
+    if(props.activeOrder){
+      var stage=props.activeOrder.taxi_stage||'searching';
+      var stageIcon={searching:'🔍',assigned:'🚕',arrived:'📍',riding:'🛣',done:'🏁',cancelled:'✖'}[stage]||'🚖';
+      var addr=splitAddress(props.activeOrder.address||'');
+      var ringClass=stage==='done'?'ring-[var(--green)]':stage==='cancelled'?'ring-[var(--red)]':'ring-[var(--gold)] pulse-soft';
+      return p('div',{className:'flex flex-1 flex-col pb-4'},[
+        p('button',{onClick:props.onBack,className:'mt-2 flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]'},[
+          a(Icon,{name:'arrowLeft',size:17}),' На главную'
+        ]),
+        p('div',{className:'mt-4 rounded-[20px] bg-[var(--surface)] p-5 text-center ring-2 '+ringClass},[
+          a('div',{className:'text-[44px]'},stageIcon),
+          a('h2',{className:'mt-2 text-[20px] font-extrabold'},TAXI_STAGE_LABEL[stage]||'В работе'),
+          props.activeOrder.price_som&&a('p',{className:'mt-2 text-[28px] font-black text-[var(--gold)]'},props.activeOrder.price_som+' сом'),
+          props.activeOrder.distance_km&&a('p',{className:'mt-1 text-[13px] text-[var(--muted)]'},(props.activeOrder.variant_id||'')+' · '+props.activeOrder.distance_km+' км')
+        ]),
+        p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+          a('h3',{className:'text-[12px] font-bold uppercase text-[var(--muted)]'},'Маршрут'),
+          addr.pointA&&p('p',{className:'mt-2 text-[13px]'},[a('span',{className:'text-[var(--muted)]'},'Откуда: '),a('b',{},addr.pointA)]),
+          addr.pointB&&p('p',{className:'mt-1 text-[13px]'},[a('span',{className:'text-[var(--muted)]'},'Куда: '),a('b',{},addr.pointB)])
+        ]),
+        ['assigned','arrived','riding'].indexOf(stage)>=0&&props.activeOrder.executor_id&&a(TaxiDriverCard,{executorId:props.activeOrder.executor_id,notify:props.notify}),
+        (stage==='searching'||stage==='assigned')&&a('button',{onClick:cancelOrder,
+          className:'mt-3 w-full rounded-[14px] border-2 border-[var(--red)] py-3.5 text-[14px] font-extrabold text-[var(--red)]'},'Отменить заказ'),
+        stage==='done'&&a('button',{onClick:function(){props.setActiveOrder(null);props.onBack();},
+          className:'mt-3 w-full rounded-[14px] bg-[var(--gold)] py-3.5 text-[14px] font-extrabold text-black'},'Заказать ещё'),
+        stage==='cancelled'&&a('button',{onClick:function(){props.setActiveOrder(null);props.onBack();},
+          className:'mt-3 w-full rounded-[14px] bg-[var(--surface-2)] py-3.5 text-[14px] font-extrabold'},'Вернуться')
+      ]);
+    }
 
-  if (view === "form") return a(MarketForm, { initial: editing, user, onCancel: () => { setView("list"); setEditing(null); }, onSave: () => { loadAds(); setView("list"); setEditing(null); }, notify });
-  if (view === "details" && active) return a(MarketDetails, { ad: active, onBack: () => setView("list"), onEdit: (ad) => { setEditing(ad); setView("form"); }, onDelete: removeAd, notify });
-  if (loading) return a("div", { className: "mt-10 flex justify-center", children: a("div", { className: "loader" }) });
-  return a(MarketList, { ads, onOpen: (ad) => { setActiveId(ad.id); setView("details"); }, onAdd: () => { setEditing(null); setView("form"); } });
-}
+    return p('div',{className:'flex flex-1 flex-col pb-4'},[
+      p('button',{onClick:props.onBack,className:'mt-2 flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]'},[
+        a(Icon,{name:'arrowLeft',size:17}),' Назад'
+      ]),
+      a('h1',{className:'mt-4 text-[26px] font-extrabold'},'🚖 Бишкек Такси'),
+      a('p',{className:'mt-1 text-[13px] text-[var(--muted)]'},'Посадка + километраж · без комиссии'),
+      p('section',{className:'mt-4 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('label',{className:'text-[12px] font-bold uppercase text-[var(--muted)]'},'📍 Откуда'),
+        p('div',{className:'mt-2 flex gap-2'},[
+          a('div',{className:'flex-1 rounded-[12px] bg-[var(--surface-2)] p-3 text-[13px] leading-relaxed'},pointA?pointA.address:'Не выбрано'),
+          p('button',{onClick:pickFromGPS,className:'rounded-[12px] bg-[var(--gold)] px-3 text-[13px] font-bold text-black'},'GPS'),
+          p('button',{onClick:function(){setPicker('A');},className:'rounded-[12px] bg-[var(--surface-2)] px-3 text-[13px] font-bold'},'Карта')
+        ])
+      ]),
+      p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('label',{className:'text-[12px] font-bold uppercase text-[var(--muted)]'},'🏁 Куда'),
+        p('div',{className:'mt-2 flex gap-2'},[
+          a('div',{className:'flex-1 rounded-[12px] bg-[var(--surface-2)] p-3 text-[13px] leading-relaxed'},pointB?pointB.address:'Не выбрано'),
+          p('button',{onClick:function(){setPicker('B');},className:'rounded-[12px] bg-[var(--surface-2)] px-3 text-[13px] font-bold'},'Карта')
+        ])
+      ]),
+      p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('label',{className:'text-[12px] font-bold uppercase text-[var(--muted)]'},'Тариф'),
+        p('div',{className:'mt-2 grid grid-cols-2 gap-2'},Object.keys(TAXI_TARIFFS).map(function(id){
+          var t=TAXI_TARIFFS[id];var active=tariff===id;
+          return p('button',{key:id,onClick:function(){setTariff(id);},
+            className:'rounded-[12px] p-3 text-left',
+            style:{background:active?t.color+'22':'var(--surface-2)',boxShadow:active?'0 0 0 2px '+t.color:'none'}},[
+            a('div',{className:'text-[18px]'},t.emoji),
+            a('div',{className:'mt-1 text-[13px] font-bold'},t.label),
+            a('div',{className:'mt-0.5 text-[11px] text-[var(--muted)]'},t.base+' + '+t.perKm+'/км')
+          ]);
+        }))
+      ]),
+      pointA&&pointB&&p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        calcLoading?a('p',{className:'text-center text-[13px] text-[var(--muted)]'},'Считаем маршрут...'):
+        route?p('div',{className:'flex items-center justify-between'},[
+          p('div',{},[
+            a('p',{className:'text-[13px] text-[var(--muted)]'},route.km+' км · ~'+route.minutes+' мин'),
+            a('p',{className:'mt-0.5 text-[11px] text-[var(--muted)]'},'Посадка '+TAXI_TARIFFS[tariff].base+' + '+route.km+' × '+TAXI_TARIFFS[tariff].perKm)
+          ]),
+          a('p',{className:'text-[24px] font-black text-[var(--gold)]'},price+' сом')
+        ]):a('p',{className:'text-center text-[13px] text-[var(--red)]'},'Не удалось посчитать')
+      ]),
+      error&&a('p',{className:'mt-3 text-[12px] text-[var(--red)]'},error),
+      a('button',{onClick:submit,disabled:sending||!route,
+        className:'mt-4 w-full rounded-[16px] bg-[var(--gold)] py-4 text-[15px] font-extrabold text-black disabled:opacity-40'},
+        sending?'Отправка...':(price?'Заказать за '+price+' сом':'Заказать')),
+      picker&&a(MapPicker,{initial:picker==='A'?pointA:pointB,onPick:onMapPick(picker),onClose:function(){setPicker(null);}})
+    ]);
+  }
 
-/* ============================ APP ============================ */
-function App() {
-  const { user, register, logout } = useAuth();
-  const [tab, setTab] = T.useState("home");
-  const [toast, setToast] = T.useState("");
-  const [taxiOpen, setTaxiOpen] = T.useState(false);
-  const [activeTaxiOrder, setActiveTaxiOrder] = T.useState(null);
+  /* ===================== WORKERS ===================== */
+  function WorkersScreen(props){
+    var s1=T.useState([]);var workers=s1[0],setWorkers=s1[1];
+    var s2=T.useState(true);var loading=s2[0],setLoading=s2[1];
+    var s3=T.useState('all');var filter=s3[0],setFilter=s3[1];
+    var s4=T.useState(false);var open=s4[0],setOpen=s4[1];
+    var s5=T.useState({name:props.user.name||'',skill:'',skillOther:'',city:''});var form=s5[0],setForm=s5[1];
+    var s6=T.useState({});var errors=s6[0],setErrors=s6[1];
+    var s7=T.useState(false);var submitting=s7[0],setSubmitting=s7[1];
+    var skill=form.skill==='Другое'?form.skillOther.trim():form.skill.trim();
 
-  const notify = (msg) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
-  const labels = { home: "Главная", taxi: "Такси", workers: "Рабочие", market: "Маркет" };
+    function loadWorkers(){
+      supabase.from('orders').select('*').eq('service_id','workers').order('created_at',{ascending:false}).then(function(r){
+        if(r.data){
+          setWorkers(r.data.map(function(o){
+            var parts=(o.address||'').split(' | ');
+            return{id:o.id,name:parts[0]||'Без имени',city:parts[1]||'',skill:o.variant_id,kind:o.variant_id,phone:o.client_phone};
+          }));
+        }
+        setLoading(false);
+      });
+    }
+    T.useEffect(function(){loadWorkers();},[]);
 
-  // Глобальный realtime на активный такси-заказ клиента
-  T.useEffect(() => {
-    if (!user) return;
-    const phone = normalizePhone(user.phone);
-    const loadActive = async () => {
-      const { data } = await supabase.from("orders")
-        .select("*")
-        .eq("client_phone", phone)
-        .eq("service_id", "city_taxi")
-        .not("taxi_stage", "in", "(done,cancelled)")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setActiveTaxiOrder(data || null);
-    };
-    loadActive();
-    const ch = supabase.channel("client-taxi-" + phone)
-      .on("postgres_changes",
-        { event: "*", schema: "public", table: "orders", filter: `client_phone=eq.${phone}` },
-        loadActive)
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user?.phone]);
+    function submit(){
+      var err={};
+      if(!form.name.trim())err.name='Укажите имя';
+      if(!skill)err.skill='Выберите навык';
+      setErrors(err);
+      if(Object.keys(err).length)return;
+      setSubmitting(true);
+      supabase.from('orders').insert([{
+        service_id:'workers',variant_id:skill,client_phone:normalizePhone(props.user.phone),
+        address:form.name.trim()+' | '+(form.city.trim()||'Город не указан'),
+        hunter:'BOARD',status:'NEW'
+      }]).then(function(r){
+        setSubmitting(false);
+        if(r.error){props.notify('Ошибка: '+r.error.message);return;}
+        setForm({name:props.user.name||'',skill:'',skillOther:'',city:''});
+        setOpen(false);props.notify('Опубликовано');loadWorkers();
+      });
+    }
 
-  if (!user) {
-    return a("div", {
-      className: "min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]",
-      style: { paddingTop: "var(--safe-area-inset-top)" },
-      children: p("div", { className: "mx-auto flex min-h-[calc(100dvh-var(--safe-area-inset-top))] w-full max-w-[560px] flex-col px-4 pb-6", children: [
-        a(Header, { label: "Регистрация", onBell: () => {}, user: null, onLogout: () => {} }),
-        a(Toast, { text: toast, onClose: () => setToast("") }),
-        a(AuthScreen, { onRegister: (data) => { register(data); notify("Добро пожаловать, " + (data.name || data.phone) + "!"); } }),
-      ] }),
+    var visible=workers.filter(function(w){return filter==='all'||w.kind===filter;});
+
+    return p('div',{className:'flex flex-1 flex-col pb-2'},[
+      p('section',{className:'rounded-[16px] bg-[var(--surface)] p-4'},[
+        p('div',{className:'flex items-start justify-between gap-3'},[
+          a('div',{},[
+            a('h1',{className:'text-[24px] font-extrabold'},'Разнорабочие'),
+            a('p',{className:'mt-1 text-[13px] text-[var(--muted)]'},'Бесплатная доска')
+          ]),
+          a('span',{className:'rounded-full bg-[var(--green-soft)] px-3 py-1.5 text-[12px] font-bold text-[var(--green)]'},'Бесплатно')
+        ]),
+        a('button',{onClick:function(){setOpen(!open);},
+          className:'mt-3 w-full rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black'},open?'Свернуть':'+ Подать объявление')
+      ]),
+      open&&p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[19px] font-extrabold'},'Новое объявление'),
+        p('div',{className:'mt-3 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-2.5'},[
+          a(Icon,{name:'phone',size:14,className:'text-[var(--gold)]'}),
+          a('span',{className:'text-[13px] font-semibold'},props.user.phone)
+        ]),
+        a('label',{className:'mt-3 block text-[12px] text-[var(--muted)]'},'Имя *'),
+        a('input',{maxLength:50,value:form.name,onChange:function(e){setForm(Object.assign({},form,{name:e.target.value}));},placeholder:'Ваше имя',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+        errors.name&&a('p',{className:'mt-1 text-[12px] text-[var(--red)]'},errors.name),
+        a('label',{className:'mt-3 block text-[12px] text-[var(--muted)]'},'Город'),
+        a('input',{maxLength:50,value:form.city,onChange:function(e){setForm(Object.assign({},form,{city:e.target.value}));},placeholder:'Бишкек',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+        a('span',{className:'mt-3 block text-[12px] text-[var(--muted)]'},'Навык *'),
+        p('div',{className:'mt-2 flex flex-wrap gap-2'},['Грузчик','Разнорабочий','Другое'].map(function(k){
+          return a('button',{key:k,onClick:function(){setForm(Object.assign({},form,{skill:k}));},
+            className:'rounded-full px-4 py-2.5 text-[13px] font-semibold '+(form.skill===k?'bg-[var(--gold)] text-black':'bg-[var(--surface-2)] text-[var(--muted)]')},k);
+        })),
+        form.skill==='Другое'&&a('input',{maxLength:40,value:form.skillOther,onChange:function(e){setForm(Object.assign({},form,{skillOther:e.target.value}));},placeholder:'Укажите навык',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+        errors.skill&&a('p',{className:'mt-1 text-[12px] text-[var(--red)]'},errors.skill),
+        a('button',{onClick:submit,disabled:submitting,className:'mt-4 w-full rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black disabled:opacity-40'},submitting?'Отправка...':'Опубликовать'),
+        a('button',{onClick:function(){setOpen(false);},className:'mt-2 w-full py-2 text-[13px] text-[var(--muted)]'},'Отмена')
+      ]),
+      p('div',{className:'no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1'},[{id:'all',label:'Все'},{id:'Грузчик',label:'Грузчики'},{id:'Разнорабочий',label:'Разнорабочие'},{id:'Другое',label:'Другое'}].map(function(k){
+        return a('button',{key:k.id,onClick:function(){setFilter(k.id);},
+          className:'shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold '+(filter===k.id?'bg-[var(--gold)] text-black':'bg-[var(--surface)] text-[var(--muted)]')},k.label);
+      })),
+      loading?a('div',{className:'mt-10 flex justify-center'},a('div',{className:'loader'})):
+      visible.length===0?a('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-6 text-center'},a('p',{className:'text-[13px] text-[var(--muted)]'},'Пока нет объявлений.')):
+      p('div',{className:'mt-3 flex flex-col gap-3'},visible.map(function(w){
+        return a('article',{key:w.id,className:'rounded-[16px] bg-[var(--surface)] p-4'},[
+          a('p',{className:'text-[16px] font-bold'},w.name+' • '+w.skill),
+          a('p',{className:'mt-1 text-[13px] text-[var(--muted)]'},w.city||'Город не указан'),
+          a('p',{className:'mt-2 text-[13px] font-semibold'},w.phone),
+          a('a',{href:telHref(w.phone),className:'mt-3 flex w-full items-center justify-center rounded-[12px] bg-[var(--green)] py-3 text-[14px] font-bold text-black'},'Позвонить')
+        ]);
+      }))
+    ]);
+  }
+
+  /* ===================== MARKET ===================== */
+  function MarketList(props){
+    var s=T.useState('all');var filter=s[0],setFilter=s[1];
+    var filtered=filter==='all'?props.ads:props.ads.filter(function(d){return d.category===filter;});
+    return p('div',{className:'flex flex-1 flex-col'},[
+      p('div',{className:'mt-4 flex items-start justify-between gap-3'},[
+        p('div',{},[a('h1',{className:'text-[24px] font-extrabold'},'Маркет'),a('p',{className:'mt-1 text-[13px] text-[var(--muted)]'},'Транспорт и сделки')]),
+        p('button',{onClick:props.onAdd,className:'flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--gold)] px-4 py-3 text-[13px] font-bold text-black'},[
+          a(Icon,{name:'plus',size:16}),' Подать'
+        ])
+      ]),
+      p('div',{className:'no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1'},[
+        p('button',{key:'all',onClick:function(){setFilter('all');},className:'shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold '+(filter==='all'?'bg-[var(--gold)] text-black':'bg-[var(--surface)] text-[var(--muted)]')},'Все · '+props.ads.length)
+      ].concat(CATEGORIES.map(function(c){
+        return a('button',{key:c.id,onClick:function(){setFilter(c.id);},
+          className:'shrink-0 rounded-full px-4 py-2.5 text-[13px] font-semibold '+(filter===c.id?'bg-[var(--gold)] text-black':'bg-[var(--surface)] text-[var(--muted)]')},c.short);
+      }))),
+      filtered.length===0?p('div',{className:'mt-4 flex flex-1 flex-col items-center justify-center rounded-[16px] bg-[var(--surface)] p-6 text-center'},[
+        a('div',{className:'flex h-16 w-16 items-center justify-center rounded-full bg-[var(--surface-2)]'},a(Icon,{name:'search',size:26,className:'text-[var(--muted)]'})),
+        a('h2',{className:'mt-5 text-[19px] font-bold'},'Пока нет объявлений')
+      ]):p('div',{className:'mt-4 flex flex-col gap-3 pb-2'},[
+        a('p',{className:'text-[12px] uppercase tracking-[0.14em] text-[var(--muted)]'},filtered.length+' объявлений')
+      ].concat(filtered.map(function(ad){
+        var cat=categoryById(ad.category);
+        return a('button',{key:ad.id,onClick:function(){props.onOpen(ad);},className:'w-full rounded-[16px] bg-[var(--surface)] p-4 text-left'},[
+          p('div',{className:'flex items-center gap-2'},[
+            a('span',{className:'rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]'},cat.short),
+            p('span',{className:'ml-auto text-[11px] text-[var(--muted)]'},formatDate(ad.created_at))
+          ]),
+          p('div',{className:'mt-3 flex items-start gap-3'},[
+            a('div',{className:'flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]'},a(Icon,{name:cat.icon,size:21,className:'text-[var(--gold)]'})),
+            p('div',{className:'min-w-0 flex-1'},[
+              a('p',{className:'text-[15px] font-bold'},ad.title),
+              a('p',{className:'clamp-2 mt-1 text-[13px] text-[var(--muted)]'},ad.description),
+              a('p',{className:'mt-2 text-[13px] font-bold text-[var(--gold)]'},formatPrice(ad))
+            ]),
+            p('div',{className:'flex shrink-0 flex-col items-end gap-2'},[
+              a('span',{className:'text-[12px] text-[var(--muted)]'},ad.city),
+              a('span',{className:'flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-2)]'},a(Icon,{name:'arrowRight',size:15}))
+            ])
+          ])
+        ]);
+      })))
+    ]);
+  }
+
+  function MarketForm(props){
+    var s1=T.useState({
+      category:(props.initial&&props.initial.category)||'',
+      title:(props.initial&&props.initial.title)||'',
+      description:(props.initial&&props.initial.description)||'',
+      price:props.initial&&!props.initial.negotiable?cleanPriceForInput(props.initial.price):'',
+      currency:(props.initial&&props.initial.currency)||'som',
+      negotiable:(props.initial&&props.initial.negotiable)||false,
+      city:(props.initial&&props.initial.city)||''
     });
+    var v=s1[0],setV=s1[1];
+    var s2=T.useState({});var errors=s2[0],setErrors=s2[1];
+    var s3=T.useState(false);var saving=s3[0],setSaving=s3[1];
+    var len=v.description.trim().length;
+    function set(k,val){var n=Object.assign({},v);n[k]=val;setV(n);}
+
+    function save(){
+      var e={};
+      if(!v.category)e.category='Выберите категорию';
+      if(!v.title.trim())e.title='Добавьте заголовок';
+      if(len<50)e.description='Нужно ещё '+(50-len)+' симв.';
+      if(!v.city.trim())e.city='Укажите город';
+      setErrors(e);
+      if(Object.keys(e).length)return;
+      setSaving(true);
+      var priceStr=v.negotiable?'Договорная':(v.price?v.price+' '+(CURRENCIES.filter(function(c){return c.id===v.currency;})[0]||{label:'сом'}).label:'Не указана');
+      var addressStr=v.title.trim()+' | '+v.city.trim()+' | '+v.description.trim()+' | '+priceStr;
+      var payload={service_id:'market',variant_id:v.category,client_phone:normalizePhone(props.user.phone),address:addressStr,hunter:'BOARD',status:'NEW'};
+      var promise;
+      if(props.initial&&props.initial.id)promise=supabase.from('orders').update(payload).eq('id',props.initial.id);
+      else promise=supabase.from('orders').insert([payload]);
+      promise.then(function(res){
+        setSaving(false);
+        if(res.error)props.notify('Ошибка: '+res.error.message);else props.onSave();
+      });
+    }
+
+    return p('div',{className:'flex flex-1 flex-col pb-4'},[
+      p('button',{onClick:props.onCancel,className:'flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]'},[a(Icon,{name:'arrowLeft',size:17}),' Назад']),
+      a('h1',{className:'mt-4 text-[24px] font-extrabold'},props.initial?'Редактирование':'Новое объявление'),
+      p('section',{className:'mt-4 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[15px] font-bold'},'Категория'),
+        a('div',{className:'mt-3 grid gap-2'},CATEGORIES.map(function(c){
+          return a('button',{key:c.id,onClick:function(){set('category',c.id);},
+            className:'flex items-center gap-3 rounded-[12px] p-3 text-left '+(v.category===c.id?'bg-[var(--gold)] text-black':'bg-[var(--surface-2)]')},[
+            a('span',{className:'flex h-10 w-10 items-center justify-center rounded-full '+(v.category===c.id?'bg-black/15':'bg-[var(--surface)]')},a(Icon,{name:c.icon,size:18})),
+            p('span',{},[a('span',{className:'block text-[14px] font-bold'},c.short),a('span',{className:'block text-[12px] '+(v.category===c.id?'text-black/70':'text-[var(--muted)]')},c.hint)])
+          ]);
+        })),
+        errors.category&&a('p',{className:'mt-2 text-[12px] text-[var(--red)]'},errors.category)
+      ]),
+      p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[15px] font-bold'},'Заголовок'),
+        a('input',{maxLength:50,value:v.title,onChange:function(e){set('title',e.target.value);},placeholder:'Например: Перевозка овощей',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+        errors.title&&a('p',{className:'mt-2 text-[12px] text-[var(--red)]'},errors.title),
+        a('h2',{className:'mt-4 text-[15px] font-bold'},'Описание'),
+        a('textarea',{rows:5,value:v.description,onChange:function(e){set('description',e.target.value);},placeholder:'Опишите груз...',className:'mt-2 w-full resize-none rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+        a('p',{className:'mt-1 text-[11px] '+(len>=50?'text-[var(--green)]':'text-[var(--muted)]')},len+' / мин 50'),
+        errors.description&&a('p',{className:'mt-2 text-[12px] text-[var(--red)]'},errors.description)
+      ]),
+      p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[15px] font-bold'},'Цена'),
+        p('div',{className:'mt-3 flex gap-2'},[
+          a('button',{onClick:function(){set('negotiable',false);},className:'flex-1 rounded-[12px] px-3 py-3 text-[13px] font-bold '+(!v.negotiable?'bg-[var(--gold)] text-black':'bg-[var(--surface-2)] text-[var(--muted)]')},'Указать'),
+          a('button',{onClick:function(){set('negotiable',true);},className:'flex-1 rounded-[12px] px-3 py-3 text-[13px] font-bold '+(v.negotiable?'bg-[var(--gold)] text-black':'bg-[var(--surface-2)] text-[var(--muted)]')},'Договорная')
+        ]),
+        !v.negotiable&&a('input',{inputMode:'decimal',value:v.price,onChange:function(e){set('price',e.target.value.replace(/[^0-9.,]/g,''));},placeholder:'15000',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+        p('div',{className:'mt-2 flex flex-wrap gap-2'},CURRENCIES.map(function(c){
+          return a('button',{key:c.id,onClick:function(){set('currency',c.id);},
+            className:'rounded-full px-4 py-2.5 text-[13px] font-semibold '+(v.currency===c.id&&!v.negotiable?'bg-[var(--gold)] text-black':'bg-[var(--surface-2)] text-[var(--muted)]')},c.label);
+        }))
+      ]),
+      p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[15px] font-bold'},'Город'),
+        a('input',{value:v.city,onChange:function(e){set('city',e.target.value);},placeholder:'Бишкек',className:'mt-2 w-full rounded-[12px] bg-[var(--surface-2)] p-3.5 text-[14px] outline-none'}),
+        errors.city&&a('p',{className:'mt-2 text-[12px] text-[var(--red)]'},errors.city),
+        p('div',{className:'mt-3 flex items-center gap-2 rounded-[12px] bg-[var(--surface-2)] px-3 py-3.5'},[
+          a(Icon,{name:'phone',size:14,className:'text-[var(--gold)]'}),
+          a('span',{className:'text-[14px] font-semibold'},props.user.phone),
+          a('span',{className:'ml-auto text-[11px] text-[var(--muted)]'},'из профиля')
+        ])
+      ]),
+      a('button',{onClick:save,disabled:saving,className:'mt-5 w-full rounded-[16px] bg-[var(--gold)] py-4 text-[15px] font-bold text-black disabled:opacity-40'},saving?'Сохранение...':(props.initial?'Сохранить':'Опубликовать')),
+      a('button',{onClick:props.onCancel,className:'mt-2 w-full py-2 text-[13px] text-[var(--muted)]'},'Отмена')
+    ]);
   }
 
-  const openTaxi = () => { setTab("taxi"); setTaxiOpen(true); };
-  const closeTaxi = () => { setTaxiOpen(false); setTab("home"); };
+  function MarketDetails(props){
+    var ad=props.ad;var cat=categoryById(ad.category);
+    var s=T.useState(false);var confirmDelete=s[0],setConfirmDelete=s[1];
+    return p('div',{className:'flex flex-1 flex-col pb-4'},[
+      p('button',{onClick:props.onBack,className:'flex w-fit items-center gap-2 text-[13px] font-semibold text-[var(--muted)]'},[a(Icon,{name:'arrowLeft',size:17}),' Назад']),
+      p('section',{className:'mt-4 rounded-[16px] bg-[var(--surface)] p-4'},[
+        p('div',{className:'flex items-start gap-3'},[
+          a('div',{className:'flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]'},a(Icon,{name:cat.icon,size:24,className:'text-[var(--gold)]'})),
+          p('div',{className:'min-w-0'},[
+            a('h1',{className:'text-[21px] font-extrabold'},ad.title),
+            a('p',{className:'mt-2 text-[14px] font-bold text-[var(--gold)]'},formatPrice(ad))
+          ])
+        ])
+      ]),
+      p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[15px] font-bold'},'Связаться'),
+        p('div',{className:'mt-3 grid grid-cols-2 gap-2'},[
+          a('a',{href:waHref(ad.whatsapp),target:'_blank',className:'flex items-center justify-center gap-2 rounded-[12px] bg-[var(--green)] py-3.5 text-[14px] font-bold text-black'},[a(Icon,{name:'messageCircle',size:17}),' WhatsApp']),
+          a('a',{href:telHref(ad.phone),className:'flex items-center justify-center gap-2 rounded-[12px] bg-[var(--gold)] py-3.5 text-[14px] font-bold text-black'},[a(Icon,{name:'phone',size:17}),' Позвонить'])
+        ])
+      ]),
+      p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[15px] font-bold'},'Описание'),
+        a('p',{className:'mt-3 whitespace-pre-wrap text-[14px] leading-relaxed'},ad.description)
+      ]),
+      ad.isOwn&&p('section',{className:'mt-3 rounded-[16px] bg-[var(--surface)] p-4'},[
+        a('h2',{className:'text-[15px] font-bold'},'Действия'),
+        p('div',{className:'mt-3 flex flex-col gap-2'},[
+          p('button',{onClick:function(){props.onEdit(ad);},className:'flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--surface-2)] py-3.5 text-[14px] font-semibold'},[a(Icon,{name:'pencil',size:16}),' Редактировать']),
+          !confirmDelete?p('button',{onClick:function(){setConfirmDelete(true);},className:'flex w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--surface-2)] py-3.5 text-[14px] font-semibold text-[var(--red)]'},[a(Icon,{name:'trash2',size:16}),' Удалить']):
+          p('div',{className:'rounded-[12px] bg-[var(--surface-2)] p-3'},[
+            a('p',{className:'text-[13px] font-semibold text-[var(--red)]'},'Удалить безвозвратно?'),
+            p('div',{className:'mt-3 grid grid-cols-2 gap-2'},[
+              a('button',{onClick:function(){props.onDelete(ad.id);},className:'rounded-[10px] bg-[var(--red)] py-2.5 text-[13px] font-bold text-black'},'Удалить'),
+              a('button',{onClick:function(){setConfirmDelete(false);},className:'rounded-[10px] bg-[var(--surface)] py-2.5 text-[13px] font-semibold'},'Отмена')
+            ])
+          ])
+        ])
+      ])
+    ]);
+  }
 
-  const renderTaxiTab = () => a(TaxiOrderScreen, {
-    notify, user, activeOrder: activeTaxiOrder, setActiveOrder: setActiveTaxiOrder, onBack: closeTaxi,
-  });
+  function MarketScreen(props){
+    var s1=T.useState([]);var ads=s1[0],setAds=s1[1];
+    var s2=T.useState(true);var loading=s2[0],setLoading=s2[1];
+    var s3=T.useState('list');var view=s3[0],setView=s3[1];
+    var s4=T.useState(null);var activeId=s4[0],setActiveId=s4[1];
+    var s5=T.useState(null);var editing=s5[0],setEditing=s5[1];
 
-  return a("div", {
-    className: "min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]",
-    style: { paddingTop: "var(--safe-area-inset-top)" },
-    children: p("div", { className: "mx-auto flex min-h-[calc(100dvh-var(--safe-area-inset-top))] w-full max-w-[560px] flex-col px-4 pb-24", children: [
-      a(Header, { label: labels[tab], onBell: () => notify("Уведомления появятся позже"), user, onLogout: () => { logout(); notify("Вы вышли"); } }),
-      a(Toast, { text: toast, onClose: () => setToast("") }),
-      a("main", { className: "flex min-w-0 flex-1 flex-col", children: [
-        a("div", { role: "tabpanel", className: tab === "home" ? "flex flex-1 flex-col" : "hidden", children: a(HomeScreen, { notify, user, activeTaxiOrder, onOpenTaxi: openTaxi }) }),
-        a("div", { role: "tabpanel", className: tab === "taxi" ? "flex flex-1 flex-col" : "hidden", children: renderTaxiTab() }),
-        a("div", { role: "tabpanel", className: tab === "workers" ? "flex flex-1 flex-col" : "hidden", children: a(WorkersScreen, { notify, user }) }),
-        a("div", { role: "tabpanel", className: tab === "market" ? "flex flex-1 flex-col" : "hidden", children: a(MarketScreen, { notify, user }) }),
-      ] }),
-      a(BottomNav, { tab, setTab }),
-    ] }),
-  });
+    function loadAds(){
+      supabase.from('orders').select('*').eq('service_id','market').order('created_at',{ascending:false}).then(function(r){
+        if(r.data){
+          setAds(r.data.map(function(o){
+            var parts=(o.address||'').split(' | ');
+            return{
+              id:o.id,title:parts[0]||'Без названия',city:parts[1]||'',
+              description:parts[2]||'',price:parts[3]||'',
+              category:o.variant_id,phone:o.client_phone,whatsapp:o.client_phone,
+              status:'Активно',created_at:o.created_at,
+              negotiable:parts[3]==='Договорная',
+              isOwn:normalizePhone(o.client_phone)===normalizePhone(props.user.phone)
+            };
+          }));
+        }
+        setLoading(false);
+      });
+    }
+    T.useEffect(function(){loadAds();},[]);
+    var active=ads.filter(function(x){return x.id===activeId;})[0];
+
+    function removeAd(id){
+      supabase.from('orders').delete().eq('id',id).then(function(r){
+        if(!r.error){setAds(ads.filter(function(x){return x.id!==id;}));setView('list');props.notify('Удалено');}
+        else props.notify('Ошибка: '+r.error.message);
+      });
+    }
+
+    if(view==='form')return a(MarketForm,{initial:editing,user:props.user,
+      onCancel:function(){setView('list');setEditing(null);},
+      onSave:function(){loadAds();setView('list');setEditing(null);},
+      notify:props.notify});
+    if(view==='details'&&active)return a(MarketDetails,{ad:active,onBack:function(){setView('list');},
+      onEdit:function(ad){setEditing(ad);setView('form');},onDelete:removeAd,notify:props.notify});
+    if(loading)return a('div',{className:'mt-10 flex justify-center'},a('div',{className:'loader'}));
+    return a(MarketList,{ads:ads,onOpen:function(ad){setActiveId(ad.id);setView('details');},
+      onAdd:function(){setEditing(null);setView('form');}});
+  }
+
+  /* ===================== APP ===================== */
+  function App(){
+    var auth=useAuth();
+    var s1=T.useState('home');var tab=s1[0],setTab=s1[1];
+    var s2=T.useState('');var toast=s2[0],setToast=s2[1];
+    var s3=T.useState(null);var activeTaxiOrder=s3[0],setActiveTaxiOrder=s3[1];
+    var notify=function(msg){setToast(msg);setTimeout(function(){setToast('');},4000);};
+    var labels={home:'Главная',taxi:'Такси',workers:'Рабочие',market:'Маркет'};
+
+    T.useEffect(function(){
+      if(!auth.user)return;
+      var phone=normalizePhone(auth.user.phone);
+      function loadActive(){
+        supabase.from('orders').select('*')
+          .eq('client_phone',phone)
+          .eq('service_id','city_taxi')
+          .not('taxi_stage','in','(done,cancelled)')
+          .order('created_at',{ascending:false})
+          .limit(1).maybeSingle().then(function(r){
+            setActiveTaxiOrder(r.data||null);
+          });
+      }
+      loadActive();
+      var ch=supabase.channel('client-taxi-'+phone)
+        .on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'client_phone=eq.'+phone},loadActive)
+        .subscribe();
+      return function(){supabase.removeChannel(ch);};
+    },[auth.user&&auth.user.phone]);
+
+    if(!auth.user){
+      return a('div',{className:'min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]',style:{paddingTop:'var(--safe-area-inset-top)'}},[
+        p('div',{key:'c',className:'mx-auto flex min-h-[calc(100dvh-var(--safe-area-inset-top))] w-full max-w-[560px] flex-col px-4 pb-6'},[
+          a(Header,{label:'Регистрация',onBell:function(){},user:null,onLogout:function(){}}),
+          a(Toast,{text:toast,onClose:function(){setToast('');}}),
+          a(AuthScreen,{onRegister:function(data){auth.register(data);notify('Добро пожаловать!');}})
+        ])
+      ]);
+    }
+
+    function openTaxi(){setTab('taxi');}
+    function closeTaxi(){setTab('home');}
+
+    return a('div',{className:'min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]',style:{paddingTop:'var(--safe-area-inset-top)'}},[
+      p('div',{key:'c',className:'mx-auto flex min-h-[calc(100dvh-var(--safe-area-inset-top))] w-full max-w-[560px] flex-col px-4 pb-24'},[
+        a(Header,{label:labels[tab],onBell:function(){notify('Уведомления позже');},user:auth.user,onLogout:function(){auth.logout();notify('Вы вышли');}}),
+        a(Toast,{text:toast,onClose:function(){setToast('');}}),
+        a('main',{className:'flex min-w-0 flex-1 flex-col'},[
+          a('div',{key:'home',style:{display:tab==='home'?'flex':'none'},className:'flex-1 flex-col'},a(HomeScreen,{notify:notify,user:auth.user,activeTaxiOrder:activeTaxiOrder,onOpenTaxi:openTaxi})),
+          a('div',{key:'taxi',style:{display:tab==='taxi'?'flex':'none'},className:'flex-1 flex-col'},a(TaxiOrderScreen,{notify:notify,user:auth.user,activeOrder:activeTaxiOrder,setActiveOrder:setActiveTaxiOrder,onBack:closeTaxi})),
+          a('div',{key:'workers',style:{display:tab==='workers'?'flex':'none'},className:'flex-1 flex-col'},a(WorkersScreen,{notify:notify,user:auth.user})),
+          a('div',{key:'market',style:{display:tab==='market'?'flex':'none'},className:'flex-1 flex-col'},a(MarketScreen,{notify:notify,user:auth.user}))
+        ]),
+        a(BottomNav,{tab:tab,setTab:setTab})
+      ])
+    ]);
+  }
+
+  var rootEl=document.getElementById('root');
+  rootEl.innerHTML='';
+  createRoot(rootEl).render(a(React.StrictMode,{},a(App,{})));
 }
-
-createRoot(document.getElementById("root")).render(a(React.StrictMode, { children: a(App, {}) }));
 </script>
 </body>
   </html>
